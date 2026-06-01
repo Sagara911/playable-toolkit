@@ -258,6 +258,7 @@
     { id: 'audio-compress', cat: 'av',    name: '音频压缩',       en: 'Audio Compressor',icon: '🔊', href: 'tools/audio-compress.html', desc: '降采样 / 单声道 / 裁剪 / fade / WAV/Opus 输出' },
     { id: 'sfx-maker',      cat: 'av',    name: '8-bit 音效',     en: 'SFX Maker',       icon: '🎮', href: 'tools/sfx-maker.html',      desc: '8-bit 游戏音效生成器,7 个经典预设 + 可调波形 / 包络 / 滤波,导出 WAV/Opus' },
     { id: 'screen-recorder',cat: 'av',    name: '屏幕录制',       en: 'Screen Recorder', icon: '📺', href: 'tools/screen-recorder.html', desc: '浏览器原生 getDisplayMedia 录屏 + 麦克风 + 摄像头叠加,直接出 WebM,零上传' },
+    { id: 'video-watermark',cat: 'av',    name: '视频去水印',     en: 'Video Watermark', icon: '🎭', href: 'tools/video-watermark.html',desc: '在画面上画矩形圈水印,逐帧填充重编码,自动保留音频' },
     // 代码 / 打包
     { id: 'html-inliner',   cat: 'code',  name: '单文件打包',     en: 'HTML Inliner',    icon: '📄', href: 'tools/html-inliner.html',   desc: '把外部 JS/CSS/图片内联为单 HTML' },
     { id: 'code-minify',    cat: 'code',  name: '代码压缩',       en: 'Code Minify',     icon: '🗜️', href: 'tools/code-minify.html',    desc: 'JS / CSS / HTML 压缩,JS 用 terser' },
@@ -338,6 +339,11 @@
       '或者反过来拖一组序列帧(PNG/JPG/WebP),会自动切到「帧合成视频」动作,设 FPS / 输出尺寸,导出 MP4',
       '输出格式默认 MP4 (H.264,Chrome/Edge 113+),不支持时回退 WebM',
       '色键抠像建议输出 PNG ZIP 或 APNG(真透明)'
+    ],
+    'video-watermark': [
+      '拖入视频,在右侧画面上**拖动鼠标**圈出水印矩形(台标/字幕/弹幕都可,可圈多个)',
+      '选「填充算法」:角落插值(纯色/渐变背景最自然)/ 边缘延伸(纹理背景)/ 纯色遮挡(粗暴)',
+      '选输出格式 MP4 / WebM + 码率,点「开始处理」—— **处理时长 ≈ 视频时长**(MediaRecorder 边播边录,自动保留音频)'
     ],
     'composer': [
       '拖入多张图片(可在素材列表上下调整顺序或删除)',
@@ -1449,6 +1455,7 @@
     'ai-cutout':       ['image/png','image/jpeg','image/webp','image/gif','application/zip'],
     'watermark-remove':['image/png','image/jpeg','image/webp','image/gif'],
     'video-toolkit':   ['video/*','image/png','image/jpeg','image/webp','application/zip'],
+    'video-watermark': ['video/*'],
     'composer':        ['image/png','image/jpeg','image/webp','image/gif','application/zip'],
     'image-diff':      ['image/png','image/jpeg','image/webp','image/gif'],
     'svg-tools':       ['image/svg+xml'],

@@ -264,9 +264,12 @@ Toolkit.injectTopbar('video-watermark');
     const w = video.clientWidth, h = video.clientHeight;
     overlay.width = w;
     overlay.height = h;
-    redrawOverlay();
+    refreshPreview();
   }
-  function redrawOverlay(extraRect) {
+
+  // Fast path used during drag: just outline + dashed in-progress rect.
+  // Skips the per-mask inpaint, which would jitter as the mouse moves.
+  function redrawSelection(extraRect) {
     if (!overlay.width) return;
     const ctx = overlay.getContext('2d');
     ctx.clearRect(0, 0, overlay.width, overlay.height);
@@ -290,6 +293,63 @@ Toolkit.injectTopbar('video-watermark');
       ctx.setLineDash([]);
     }
   }
+
+  // Live preview: for each finalized mask, apply the inpaint to the CURRENT
+  // video frame and paint the result onto the overlay at that mask's position.
+  // Result: the user sees the watermark literally disappear inside the
+  // rectangle as soon as they finish drawing, and the preview updates as the
+  // video plays / scrubs. Border still drawn so the selection is visible.
+  // Falls back to plain selection rendering before metadata loads.
+  function refreshPreview() {
+    if (!overlay.width) return;
+    if (!video.videoWidth || masks.length === 0) { redrawSelection(); return; }
+    const ctx = overlay.getContext('2d');
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+    const sx = overlay.width / video.videoWidth;
+    const sy = overlay.height / video.videoHeight;
+    // Native-resolution scratch canvas — inpaint runs at full quality, the
+    // scaled drawImage to the overlay handles the display-size resampling.
+    const work = newCanvas(video.videoWidth, video.videoHeight);
+    const wctx = work.getContext('2d', { willReadFrequently: true });
+    try { wctx.drawImage(video, 0, 0); } catch (_) { redrawSelection(); return; }
+    const method = $('method').value;
+    const solidHex = $('solidColor').value || '#000';
+    for (const m of masks) {
+      try { inpaint(wctx, m, video.videoWidth, video.videoHeight, method, solidHex); } catch (_) {}
+      const ox = m.x * sx, oy = m.y * sy;
+      const ow = m.w * sx, oh = m.h * sy;
+      // Paint the inpainted region onto the overlay (covers the still-visible
+      // watermark in the source video underneath).
+      ctx.drawImage(work, m.x, m.y, m.w, m.h, ox, oy, ow, oh);
+      // Then the red selection border on top so the user still sees the mask.
+      ctx.strokeStyle = '#ff8080';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(ox + 0.5, oy + 0.5, ow - 1, oh - 1);
+    }
+  }
+  // Re-render the preview whenever the current frame changes (playback or
+  // scrub) or when the user toggles inpaint method / solid color.
+  video.addEventListener('timeupdate', refreshPreview);
+  video.addEventListener('seeked', refreshPreview);
+  video.addEventListener('play', () => { previewLoop(); });
+  video.addEventListener('pause', refreshPreview);
+  $('method').addEventListener('change', refreshPreview);
+  $('solidColor').addEventListener('input', refreshPreview);
+
+  // While the video plays, timeupdate fires only ~4×/s in some browsers, which
+  // looks jerky for the inpaint preview. Drive a rAF loop instead — it still
+  // costs almost nothing per frame for the typical small mask + corner algo.
+  let _previewRaf = 0;
+  function previewLoop() {
+    if (video.paused || video.ended || !video.videoWidth || masks.length === 0) {
+      cancelAnimationFrame(_previewRaf);
+      _previewRaf = 0;
+      return;
+    }
+    refreshPreview();
+    _previewRaf = requestAnimationFrame(previewLoop);
+  }
+
   window.addEventListener('resize', () => sizeOverlay());
   video.addEventListener('loadedmetadata', () => sizeOverlay());
 
@@ -307,7 +367,7 @@ Toolkit.injectTopbar('video-watermark');
     const cx = e.clientX - r.left, cy = e.clientY - r.top;
     const x = Math.min(dragStart.x, cx), y = Math.min(dragStart.y, cy);
     const w = Math.abs(cx - dragStart.x), h = Math.abs(cy - dragStart.y);
-    redrawOverlay({ x, y, w, h });
+    redrawSelection({ x, y, w, h });
   });
   overlay.addEventListener('pointerup', (e) => {
     if (!dragStart) return;
@@ -328,7 +388,7 @@ Toolkit.injectTopbar('video-watermark');
     };
     masks.push(m);
     renderMaskList();
-    redrawOverlay();
+    refreshPreview();
     $('processBtn').disabled = masks.length === 0;
   });
   overlay.addEventListener('pointercancel', () => { dragStart = null; redrawOverlay(); });
@@ -342,7 +402,7 @@ Toolkit.injectTopbar('video-watermark');
       li.querySelector('button').addEventListener('click', () => {
         masks.splice(i, 1);
         renderMaskList();
-        redrawOverlay();
+        refreshPreview();
         $('processBtn').disabled = masks.length === 0;
       });
       ul.appendChild(li);
@@ -354,7 +414,7 @@ Toolkit.injectTopbar('video-watermark');
   $('clearMasksBtn').addEventListener('click', () => {
     masks = [];
     renderMaskList();
-    redrawOverlay();
+    refreshPreview();
     $('processBtn').disabled = true;
   });
 
@@ -448,6 +508,7 @@ Toolkit.injectTopbar('video-watermark');
   $('processBtn').addEventListener('click', async () => {
     if (!srcFile || masks.length === 0) return;
     $('processBtn').disabled = true;
+    $('processBtn').textContent = Toolkit.T('vw.processing', null, '处理中... (≈ 视频时长)');
     progress.set(0);
     const method = $('method').value;
     const solidHex = $('solidColor').value || '#000';
@@ -511,6 +572,7 @@ Toolkit.injectTopbar('video-watermark');
     } catch (e) {
       log.err('MediaRecorder 初始化失败:' + e.message);
       $('processBtn').disabled = false;
+      $('processBtn').textContent = Toolkit.T('vw.process', null, '开始处理');
       return;
     }
     const chunks = [];
@@ -565,6 +627,7 @@ Toolkit.injectTopbar('video-watermark');
     if (blob.size < 1024) {
       log.err(`输出过小(${blob.size} 字节),可能录制失败 — 试试降低码率或换 WebM 格式`);
       $('processBtn').disabled = false;
+      $('processBtn').textContent = Toolkit.T('vw.process', null, '开始处理');
       return;
     }
 
@@ -575,6 +638,16 @@ Toolkit.injectTopbar('video-watermark');
     handoff?.setBlob(blob, `${name}.${outExt}`, mimeType.split(';')[0]);
     log.ok(`完成 · ${fmtBytes(blob.size)} · ${audioNote}`);
     $('processBtn').disabled = false;
+    $('processBtn').textContent = Toolkit.T('vw.process', null, '开始处理');
+    // Make the result hard to miss — page is tall; scroll the output into view
+    // and flash a brief highlight so the user knows where to look.
+    requestAnimationFrame(() => {
+      $('outputBox').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      $('outputBox').animate(
+        [{ boxShadow: '0 0 0 0 rgba(var(--jade-rgb), 0)' }, { boxShadow: '0 0 0 16px rgba(var(--jade-rgb), 0.5)' }, { boxShadow: '0 0 0 0 rgba(var(--jade-rgb), 0)' }],
+        { duration: 1200, easing: 'ease-out' }
+      );
+    });
   });
 
   $('downloadBtn').addEventListener('click', () => {

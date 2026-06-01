@@ -338,8 +338,18 @@ Toolkit.injectTopbar('sprite-packer');
 
     let frameW = 0, frameH = 0;
     if (uniformSize) {
-      frameW = Math.max(...processed.map(p => p.bounds.w));
-      frameH = Math.max(...processed.map(p => p.bounds.h));
+      // When trim is on, size cells to the SOURCE dims (not the trimmed bbox).
+      // Reason: each frame's trimmed bbox is a different size, and centering
+      // a smaller bbox in a max-bbox cell puts content at slightly different
+      // sub-cell offsets per frame. Any tool slicing by uniform grid (or any
+      // game engine ignoring spriteSourceSize) then plays a JITTERY animation
+      // because the visible content jumps frame-to-frame inside the cell.
+      // Source-sized cells let us place each trim region at its source-anchor
+      // position (xOff + bounds.x, yOff + bounds.y), so the cell IS a frame in
+      // the source coordinate frame — grid-based playback is stable.
+      // When trim is off, bounds = full source already, so max(bounds) == max(source).
+      frameW = Math.max(...processed.map(p => trim ? p.sourceW : p.bounds.w));
+      frameH = Math.max(...processed.map(p => trim ? p.sourceH : p.bounds.h));
       if (forceSquare) {
         const side = Math.max(frameW, frameH);
         frameW = frameH = side;
@@ -458,8 +468,21 @@ Toolkit.injectTopbar('sprite-packer');
     processed.forEach((p, i) => {
       const c = i % cols, r = Math.floor(i / cols);
       const cellW = colWidths[c], cellH = rowHeights[r];
-      const dx = xOff[c] + (uniformSize ? Math.floor((cellW - p.bounds.w) / 2) : 0);
-      const dy = yOff[r] + (uniformSize ? Math.floor((cellH - p.bounds.h) / 2) : 0);
+      // Placement: when trim+uniformSize, preserve the source-anchor position
+      // so every cell IS a frame in the source coord frame (stable grid-based
+      // animation). Otherwise center the trimmed region in the cell (or pin to
+      // cell origin when non-uniform).
+      let dx, dy;
+      if (uniformSize && trim) {
+        dx = xOff[c] + p.bounds.x;
+        dy = yOff[r] + p.bounds.y;
+      } else if (uniformSize) {
+        dx = xOff[c] + Math.floor((cellW - p.bounds.w) / 2);
+        dy = yOff[r] + Math.floor((cellH - p.bounds.h) / 2);
+      } else {
+        dx = xOff[c];
+        dy = yOff[r];
+      }
       octx.drawImage(p.canvas, p.bounds.x, p.bounds.y, p.bounds.w, p.bounds.h, dx, dy, p.bounds.w, p.bounds.h);
       meta.push({
         name: p.name, x: dx, y: dy, w: p.bounds.w, h: p.bounds.h,

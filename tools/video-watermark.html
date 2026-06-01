@@ -31,8 +31,8 @@
 <style>
   .preview-wrap {
     position: relative;
-    display: inline-block;
-    max-width: 100%;
+    display: block;
+    width: 100%;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     overflow: hidden;
@@ -40,8 +40,53 @@
   }
   .preview-wrap video {
     display: block;
-    max-width: 100%;
+    width: 100%;
     height: auto;
+  }
+  /* ===== Before / After comparison panes ===== */
+  .compare-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+  }
+  .compare-pane {
+    flex: 1 1 360px;
+    min-width: 0;
+  }
+  .compare-pane h3 {
+    margin: 0 0 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    letter-spacing: 0.02em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .compare-pane h3 .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+  }
+  .compare-pane.before h3 .dot { background: #ff8080; }
+  .compare-pane.after  h3 .dot { background: var(--jade); }
+  #afterCanvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    background: #000;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .after-empty {
+    aspect-ratio: 16 / 9;
+    background: rgba(255,255,255,0.04);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-size: 12px;
   }
   .mask-overlay {
     position: absolute;
@@ -180,9 +225,19 @@
 
   <div class="main">
     <div class="stats" id="stats" data-i18n="vw.stats.idle">Dobby 待命 · 拖入视频开始</div>
-    <div class="preview-wrap" id="previewWrap" style="display:none">
-      <video id="srcVideo" controls preload="auto" playsinline muted></video>
-      <canvas class="mask-overlay" id="maskOverlay"></canvas>
+    <div class="compare-row" id="compareRow" style="display:none">
+      <div class="compare-pane before">
+        <h3><span class="dot"></span><span data-i18n="vw.before">原始 · 拖动鼠标圈水印</span></h3>
+        <div class="preview-wrap" id="previewWrap">
+          <video id="srcVideo" controls preload="auto" playsinline muted></video>
+          <canvas class="mask-overlay" id="maskOverlay"></canvas>
+        </div>
+      </div>
+      <div class="compare-pane after">
+        <h3><span class="dot"></span><span data-i18n="vw.after">去水印后 · 实时预览</span></h3>
+        <canvas id="afterCanvas"></canvas>
+        <div class="after-empty" id="afterEmpty" data-i18n="vw.after.empty">还没圈任何水印 · 在左边拖矩形</div>
+      </div>
     </div>
     <div id="outputBox">
       <h2 style="margin-top:0" data-i18n="vw.output.title">处理结果</h2>
@@ -238,7 +293,7 @@ Toolkit.injectTopbar('video-watermark');
     const url = URL.createObjectURL(f);
     video.src = url;
     video.muted = true;  // muted so autoplay works for the preview; we'll capture audio from the stream separately
-    previewWrap.style.display = '';
+    $('compareRow').style.display = '';
 
     await new Promise((res, rej) => {
       video.onloadedmetadata = () => res();
@@ -294,21 +349,56 @@ Toolkit.injectTopbar('video-watermark');
     }
   }
 
-  // Live preview: for each finalized mask, apply the inpaint to the CURRENT
-  // video frame and paint the result onto the overlay at that mask's position.
-  // Result: the user sees the watermark literally disappear inside the
-  // rectangle as soon as they finish drawing, and the preview updates as the
-  // video plays / scrubs. Border still drawn so the selection is visible.
-  // Falls back to plain selection rendering before metadata loads.
+  // Keep the after-canvas's pixel buffer in sync with its displayed size,
+  // resizing lazily (resizing a canvas clears it + costs an allocation).
+  let _lastAfterW = 0;
+  function ensureAfterCanvasSize() {
+    const after = $('afterCanvas');
+    if (!after || !video.videoWidth) return false;
+    const w = after.clientWidth;
+    if (w < 8) return false;
+    if (w !== _lastAfterW) {
+      after.width = w;
+      after.height = Math.round(w * (video.videoHeight / video.videoWidth));
+      _lastAfterW = w;
+    }
+    return true;
+  }
+
+  // Live preview — runs on every video frame change AND every mask edit.
+  //   Source pane (left): overlay shows the masks as red outlines + inpaint
+  //     fill INSIDE each rectangle, so the user sees the watermark disappear
+  //     in-place too.
+  //   After pane (right): a separate canvas showing the FULL frame with all
+  //     masks inpainted — that's the side-by-side compare the user asked for.
+  // Both panes always reflect the SAME current video time, so playing / scrubbing
+  // the source updates both in lockstep.
   function refreshPreview() {
+    const afterEmpty = $('afterEmpty');
     if (!overlay.width) return;
-    if (!video.videoWidth || masks.length === 0) { redrawSelection(); return; }
+    if (!video.videoWidth) { redrawSelection(); return; }
     const ctx = overlay.getContext('2d');
     ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+    // After-canvas: even when no masks exist yet, mirror the raw source frame
+    // so the user can see the pane is alive + in sync (it'll start showing the
+    // inpainted result the moment a mask is drawn).
+    const haveAfter = ensureAfterCanvasSize();
+    const after = $('afterCanvas');
+    if (haveAfter) {
+      const actx = after.getContext('2d');
+      try { actx.drawImage(video, 0, 0, after.width, after.height); } catch (_) {}
+    }
+    if (afterEmpty) afterEmpty.style.display = masks.length === 0 ? '' : 'none';
+    if (after) after.style.display = masks.length === 0 ? 'none' : '';
+
+    if (masks.length === 0) { redrawSelection(); return; }
+
     const sx = overlay.width / video.videoWidth;
     const sy = overlay.height / video.videoHeight;
-    // Native-resolution scratch canvas — inpaint runs at full quality, the
-    // scaled drawImage to the overlay handles the display-size resampling.
+    // Native-resolution scratch canvas — inpaint runs at full quality. We paint
+    // the result onto BOTH the overlay (mask region) and the after-canvas
+    // (full frame, scaled).
     const work = newCanvas(video.videoWidth, video.videoHeight);
     const wctx = work.getContext('2d', { willReadFrequently: true });
     try { wctx.drawImage(video, 0, 0); } catch (_) { redrawSelection(); return; }
@@ -318,13 +408,15 @@ Toolkit.injectTopbar('video-watermark');
       try { inpaint(wctx, m, video.videoWidth, video.videoHeight, method, solidHex); } catch (_) {}
       const ox = m.x * sx, oy = m.y * sy;
       const ow = m.w * sx, oh = m.h * sy;
-      // Paint the inpainted region onto the overlay (covers the still-visible
-      // watermark in the source video underneath).
       ctx.drawImage(work, m.x, m.y, m.w, m.h, ox, oy, ow, oh);
-      // Then the red selection border on top so the user still sees the mask.
       ctx.strokeStyle = '#ff8080';
       ctx.lineWidth = 2;
       ctx.strokeRect(ox + 0.5, oy + 0.5, ow - 1, oh - 1);
+    }
+    // After pane: full inpainted frame (no selection markings — clean "result")
+    if (haveAfter) {
+      const actx = after.getContext('2d');
+      actx.drawImage(work, 0, 0, after.width, after.height);
     }
   }
   // Re-render the preview whenever the current frame changes (playback or
@@ -661,7 +753,7 @@ Toolkit.injectTopbar('video-watermark');
     if (video.src) URL.revokeObjectURL(video.src);
     video.removeAttribute('src');
     video.load();
-    previewWrap.style.display = 'none';
+    $('compareRow').style.display = 'none';
     $('outputBox').style.display = 'none';
     renderMaskList();
     $('stats').textContent = Toolkit.T('vw.stats.idle', null, 'Dobby 待命 · 拖入视频开始');

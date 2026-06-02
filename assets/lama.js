@@ -251,32 +251,42 @@
     }
     if (maxX < 0) return new ImageData(new Uint8ClampedArray(imageData.data), w, h);
 
-    // 2. Build a HARD core (fully repainted) + a wide SOFT alpha that fades to
-    //    0 *outside* the core — so there's no visible box and no leftover seam,
-    //    which matters most on bright/flat areas where any edge shows.
-    //      core  = watermark dilated a touch  → alpha = 1, model fully repaints
-    //      ramp  = core grown by FEATH        → outer extent of any change
-    //      alpha = multi-pass box-blur(ramp)  → smooth 1→0 falloff beyond core
-    //    Done on a local ROI rectangle so cost is independent of frame size.
+    // 2. The seam-hiding trick. LaMa leaves a faint discontinuity right at the
+    //    edge of the HOLE it fills. So we make the hole BIGGER than the blended
+    //    region and let the alpha fall to 0 *before* the hole edge — the seam
+    //    then lands where alpha≈0 (we show the untouched, clean original there),
+    //    so it never appears. Layout (distance outward from the watermark):
+    //      [0 .. ACORE]            alpha = 1   (watermark fully repainted, no ghost)
+    //      [ACORE .. ACORE+FEATH]  alpha 1→0   (smooth gaussian-ish ramp on clean bg)
+    //      [.. HOLEDIL]            alpha = 0   (still inside hole; LaMa's seam hides here)
+    //      [beyond HOLEDIL]        untouched original
+    //    Computed on a local ROI so cost is independent of frame resolution.
     const bw = maxX - minX + 1, bh = maxY - minY + 1;
     const minBB = Math.min(bw, bh);
-    const DIL = Math.max(2, Math.min(10, Math.round(minBB * 0.05)));
-    const FEATH = Math.max(8, Math.min(48, Math.round(minBB * 0.35)));
-    const RB = Math.max(2, Math.round(FEATH * 0.6));
-    const MARGIN = DIL + FEATH + RB + 2;
+    const ACORE = Math.max(2, Math.round(minBB * 0.04));
+    const FEATH = Math.max(6, Math.min(28, Math.round(minBB * 0.20)));
+    const RB = Math.max(2, Math.round(FEATH * 0.5));
+    const HOLEDIL = ACORE + FEATH + RB + 4;            // hole extends past the ramp
+    const MARGIN = HOLEDIL + RB + 2;
     const rx0 = Math.max(0, minX - MARGIN), ry0 = Math.max(0, minY - MARGIN);
     const rx1 = Math.min(w, maxX + MARGIN + 1), ry1 = Math.min(h, maxY + MARGIN + 1);
     const rw = rx1 - rx0, rh = ry1 - ry0;
     const lm = new Uint8Array(rw * rh);
     for (let y = 0; y < rh; y++) { const sr = (ry0 + y) * w + rx0, dr = y * rw; for (let x = 0; x < rw; x++) lm[dr + x] = mask[sr + x]; }
-    const coreL = dilateMask(lm, rw, rh, DIL);
-    const rampL = dilateMask(coreL, rw, rh, FEATH);
-    const alphaL = blurMask(rampL, rw, rh, RB, 2);   // 2-pass box ≈ gaussian
+    const holeL = dilateMask(lm, rw, rh, HOLEDIL);     // LaMa fill region
+    const acoreL = dilateMask(lm, rw, rh, ACORE);      // alpha = 1 region
+    const rampL = dilateMask(acoreL, rw, rh, FEATH);
+    const alphaL = blurMask(rampL, rw, rh, RB, 2);     // 2-pass box ≈ gaussian
+    // clamp: 1 over the core (no watermark ghost), 0 outside the hole (hide seam)
+    for (let i = 0; i < alphaL.length; i++) {
+      if (acoreL[i]) alphaL[i] = 1;
+      else if (!holeL[i]) alphaL[i] = 0;
+    }
     const alpha = new Float32Array(w * h);
-    const plateau = new Uint8Array(w * h);           // LaMa hole = fully-repainted core
+    const plateau = new Uint8Array(w * h);             // LaMa hole
     for (let y = 0; y < rh; y++) {
       const gr = (ry0 + y) * w + rx0, lr = y * rw;
-      for (let x = 0; x < rw; x++) { alpha[gr + x] = alphaL[lr + x]; plateau[gr + x] = coreL[lr + x]; }
+      for (let x = 0; x < rw; x++) { alpha[gr + x] = alphaL[lr + x]; plateau[gr + x] = holeL[lr + x]; }
     }
 
     // 3. plan tiles as NATIVE-resolution 512² windows (no upscaling a small
@@ -304,7 +314,7 @@
       if (has) tiles.push({ x0, y0 });
     }
 
-    onLog?.(`mask ${bw}×${bh} @ (${minX},${minY}) · 外扩${DIL}px·羽化${FEATH}px · ${CW}×${CH} 原分辨率 · ${tiles.length} 块`);
+    onLog?.(`[羽化v2] mask ${bw}×${bh} @ (${minX},${minY}) · 洞${HOLEDIL}px·羽化${FEATH}px · ${CW}×${CH} 原分辨率 · ${tiles.length} 块`);
 
     const result = new Uint8ClampedArray(imageData.data);
     const srcCv = newCanvas(w, h);

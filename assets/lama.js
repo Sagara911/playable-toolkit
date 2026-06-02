@@ -70,27 +70,35 @@
     return out;
   }
 
-  // Separable box blur of a 0/1 mask → Float32 0..1 alpha. Soft edges so the
-  // inpaint blends into the original instead of leaving a hard rectangular seam.
-  function blurMask(mask, w, h, r) {
+  // Separable box blur of a mask → Float32 0..1 alpha, `passes` times (3 passes
+  // ≈ a Gaussian). Soft edges so the inpaint fades into the original with no
+  // hard rectangular seam. Operates on whatever (small ROI) buffer it's given.
+  function blurMask(mask, w, h, r, passes) {
+    passes = Math.max(1, passes || 1);
+    if (r < 1) return Float32Array.from(mask);
     const win = 2 * r + 1;
-    const tmp = new Float32Array(w * h), out = new Float32Array(w * h);
-    for (let y = 0; y < h; y++) {
-      const row = y * w;
-      for (let x = 0; x < w; x++) {
-        let s = 0;
-        for (let dx = -r; dx <= r; dx++) { const xx = Math.min(w - 1, Math.max(0, x + dx)); s += mask[row + xx]; }
-        tmp[row + x] = s / win;
-      }
-    }
-    for (let x = 0; x < w; x++) {
+    let cur = Float32Array.from(mask);
+    const tmp = new Float32Array(w * h);
+    for (let p = 0; p < passes; p++) {
+      const out = new Float32Array(w * h);
       for (let y = 0; y < h; y++) {
-        let s = 0;
-        for (let dy = -r; dy <= r; dy++) { const yy = Math.min(h - 1, Math.max(0, y + dy)); s += tmp[yy * w + x]; }
-        out[y * w + x] = s / win;
+        const row = y * w;
+        for (let x = 0; x < w; x++) {
+          let s = 0;
+          for (let dx = -r; dx <= r; dx++) { const xx = x + dx < 0 ? 0 : (x + dx >= w ? w - 1 : x + dx); s += cur[row + xx]; }
+          tmp[row + x] = s / win;
+        }
       }
+      for (let x = 0; x < w; x++) {
+        for (let y = 0; y < h; y++) {
+          let s = 0;
+          for (let dy = -r; dy <= r; dy++) { const yy = y + dy < 0 ? 0 : (y + dy >= h ? h - 1 : y + dy); s += tmp[yy * w + x]; }
+          out[y * w + x] = s / win;
+        }
+      }
+      cur = out;
     }
-    return out;
+    return cur;
   }
 
   async function loadOrt(onStatus) {
@@ -243,13 +251,33 @@
     }
     if (maxX < 0) return new ImageData(new Uint8ClampedArray(imageData.data), w, h);
 
-    // 2. grow the hole a touch (cover the mark's anti-aliased fringe) and build
-    //    a soft alpha so the inpaint blends in instead of leaving a hard seam.
+    // 2. Build a HARD core (fully repainted) + a wide SOFT alpha that fades to
+    //    0 *outside* the core — so there's no visible box and no leftover seam,
+    //    which matters most on bright/flat areas where any edge shows.
+    //      core  = watermark dilated a touch  → alpha = 1, model fully repaints
+    //      ramp  = core grown by FEATH        → outer extent of any change
+    //      alpha = multi-pass box-blur(ramp)  → smooth 1→0 falloff beyond core
+    //    Done on a local ROI rectangle so cost is independent of frame size.
     const bw = maxX - minX + 1, bh = maxY - minY + 1;
-    const DIL = Math.max(2, Math.min(12, Math.round(Math.min(bw, bh) * 0.06)));
-    const FEATH = Math.max(2, Math.round(DIL * 0.9));
-    const dmask = dilateMask(mask, w, h, DIL);
-    const alpha = blurMask(dmask, w, h, FEATH);   // Float32 0..1
+    const minBB = Math.min(bw, bh);
+    const DIL = Math.max(2, Math.min(10, Math.round(minBB * 0.05)));
+    const FEATH = Math.max(8, Math.min(48, Math.round(minBB * 0.35)));
+    const RB = Math.max(2, Math.round(FEATH * 0.6));
+    const MARGIN = DIL + FEATH + RB + 2;
+    const rx0 = Math.max(0, minX - MARGIN), ry0 = Math.max(0, minY - MARGIN);
+    const rx1 = Math.min(w, maxX + MARGIN + 1), ry1 = Math.min(h, maxY + MARGIN + 1);
+    const rw = rx1 - rx0, rh = ry1 - ry0;
+    const lm = new Uint8Array(rw * rh);
+    for (let y = 0; y < rh; y++) { const sr = (ry0 + y) * w + rx0, dr = y * rw; for (let x = 0; x < rw; x++) lm[dr + x] = mask[sr + x]; }
+    const coreL = dilateMask(lm, rw, rh, DIL);
+    const rampL = dilateMask(coreL, rw, rh, FEATH);
+    const alphaL = blurMask(rampL, rw, rh, RB, 2);   // 2-pass box ≈ gaussian
+    const alpha = new Float32Array(w * h);
+    const plateau = new Uint8Array(w * h);           // LaMa hole = fully-repainted core
+    for (let y = 0; y < rh; y++) {
+      const gr = (ry0 + y) * w + rx0, lr = y * rw;
+      for (let x = 0; x < rw; x++) { alpha[gr + x] = alphaL[lr + x]; plateau[gr + x] = coreL[lr + x]; }
+    }
 
     // 3. plan tiles as NATIVE-resolution 512² windows (no upscaling a small
     //    region — that was the "frosted glass" blur). Windows ≤ image, clamped
@@ -267,16 +295,16 @@
       }
       return ps;
     };
-    const xs = positions(Math.max(0, minX - DIL), Math.min(w, maxX + DIL), CW, w - CW);
-    const ys = positions(Math.max(0, minY - DIL), Math.min(h, maxY + DIL), CH, h - CH);
+    const xs = positions(rx0, rx1 - 1, CW, w - CW);
+    const ys = positions(ry0, ry1 - 1, CH, h - CH);
     const tiles = [];
     for (const y0 of ys) for (const x0 of xs) {
       let has = false;
-      for (let yy = y0; yy < y0 + CH && !has; yy++) { const r = yy * w; for (let xx = x0; xx < x0 + CW; xx++) if (dmask[r + xx]) { has = true; break; } }
+      for (let yy = y0; yy < y0 + CH && !has; yy++) { const r = yy * w; for (let xx = x0; xx < x0 + CW; xx++) if (plateau[r + xx]) { has = true; break; } }
       if (has) tiles.push({ x0, y0 });
     }
 
-    onLog?.(`mask bbox ${bw}×${bh} @ (${minX},${minY}) · 外扩${DIL}px · ${CW}×${CH} 原分辨率 · ${tiles.length} 块推理`);
+    onLog?.(`mask ${bw}×${bh} @ (${minX},${minY}) · 外扩${DIL}px·羽化${FEATH}px · ${CW}×${CH} 原分辨率 · ${tiles.length} 块`);
 
     const result = new Uint8ClampedArray(imageData.data);
     const srcCv = newCanvas(w, h);
@@ -303,7 +331,7 @@
       for (let yy = 0; yy < CH; yy++) {
         const sr = (y0 + yy) * w, dr = yy * TILE;
         for (let xx = 0; xx < CW; xx++) {
-          const v = dmask[sr + (x0 + xx)] ? 255 : 0;
+          const v = plateau[sr + (x0 + xx)] ? 255 : 0;
           const pi = (dr + xx) * 4;
           mImg.data[pi] = v; mImg.data[pi+1] = v; mImg.data[pi+2] = v; mImg.data[pi+3] = 255;
         }

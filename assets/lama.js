@@ -46,6 +46,53 @@
     return c;
   }
 
+  // Separable max-filter dilation of a binary mask by `r` px. Grows the hole so
+  // LaMa also covers the watermark's anti-aliased fringe (the drawn rectangle
+  // usually clips a pixel or two of the mark).
+  function dilateMask(mask, w, h, r) {
+    if (r <= 0) return mask.slice();
+    const tmp = new Uint8Array(w * h), out = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) {
+      const row = y * w;
+      for (let x = 0; x < w; x++) {
+        let v = 0;
+        for (let dx = -r; dx <= r; dx++) { const xx = x + dx; if (xx >= 0 && xx < w && mask[row + xx]) { v = 1; break; } }
+        tmp[row + x] = v;
+      }
+    }
+    for (let x = 0; x < w; x++) {
+      for (let y = 0; y < h; y++) {
+        let v = 0;
+        for (let dy = -r; dy <= r; dy++) { const yy = y + dy; if (yy >= 0 && yy < h && tmp[yy * w + x]) { v = 1; break; } }
+        out[y * w + x] = v;
+      }
+    }
+    return out;
+  }
+
+  // Separable box blur of a 0/1 mask → Float32 0..1 alpha. Soft edges so the
+  // inpaint blends into the original instead of leaving a hard rectangular seam.
+  function blurMask(mask, w, h, r) {
+    const win = 2 * r + 1;
+    const tmp = new Float32Array(w * h), out = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) {
+      const row = y * w;
+      for (let x = 0; x < w; x++) {
+        let s = 0;
+        for (let dx = -r; dx <= r; dx++) { const xx = Math.min(w - 1, Math.max(0, x + dx)); s += mask[row + xx]; }
+        tmp[row + x] = s / win;
+      }
+    }
+    for (let x = 0; x < w; x++) {
+      for (let y = 0; y < h; y++) {
+        let s = 0;
+        for (let dy = -r; dy <= r; dy++) { const yy = Math.min(h - 1, Math.max(0, y + dy)); s += tmp[yy * w + x]; }
+        out[y * w + x] = s / win;
+      }
+    }
+    return out;
+  }
+
   async function loadOrt(onStatus) {
     if (window.ort) return window.ort;
     onStatus?.('加载 onnxruntime-web (首次联网 ~3 MB)...');
@@ -196,105 +243,90 @@
     }
     if (maxX < 0) return new ImageData(new Uint8ClampedArray(imageData.data), w, h);
 
-    // 2. tile grid over bbox + padding, clamped to the image
-    const startX = Math.max(0, minX - TILE_PAD);
-    const startY = Math.max(0, minY - TILE_PAD);
-    const endX = Math.min(w, maxX + TILE_PAD + 1);
-    const endY = Math.min(h, maxY + TILE_PAD + 1);
+    // 2. grow the hole a touch (cover the mark's anti-aliased fringe) and build
+    //    a soft alpha so the inpaint blends in instead of leaving a hard seam.
+    const bw = maxX - minX + 1, bh = maxY - minY + 1;
+    const DIL = Math.max(2, Math.min(12, Math.round(Math.min(bw, bh) * 0.06)));
+    const FEATH = Math.max(2, Math.round(DIL * 0.9));
+    const dmask = dilateMask(mask, w, h, DIL);
+    const alpha = blurMask(dmask, w, h, FEATH);   // Float32 0..1
 
-    const tiles = [];
-    const seen = new Set();
-    for (let ty = startY; ty < endY; ty += TILE_STRIDE) {
-      for (let tx = startX; tx < endX; tx += TILE_STRIDE) {
-        let x0 = tx, y0 = ty;
-        let x1 = Math.min(w, x0 + TILE);
-        let y1 = Math.min(h, y0 + TILE);
-        if (x1 - x0 < TILE && w >= TILE) x0 = Math.max(0, x1 - TILE);
-        if (y1 - y0 < TILE && h >= TILE) y0 = Math.max(0, y1 - TILE);
-        const key = x0 + ',' + y0;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        let has = false;
-        for (let yy = y0; yy < y1 && !has; yy++) {
-          const r = yy * w;
-          for (let xx = x0; xx < x1; xx++) if (mask[r + xx]) { has = true; break; }
-        }
-        if (!has) continue;
-        tiles.push({ x0, y0, x1, y1 });
-        if (x1 >= w) break;
+    // 3. plan tiles as NATIVE-resolution 512² windows (no upscaling a small
+    //    region — that was the "frosted glass" blur). Windows ≤ image, clamped
+    //    so they stay in-bounds; for images < 512 px we pad by edge-replication.
+    const CW = Math.min(TILE, w), CH = Math.min(TILE, h);
+    const positions = (bStart, bEnd, span, max) => {
+      const stride = Math.max(1, span - 128);
+      const ps = [], seen = new Set();
+      let t = bStart;
+      while (true) {
+        const p = Math.min(Math.max(0, t), Math.max(0, max));
+        if (!seen.has(p)) { seen.add(p); ps.push(p); }
+        if (p >= Math.max(0, max) || t > bEnd) break;
+        t += stride;
       }
+      return ps;
+    };
+    const xs = positions(Math.max(0, minX - DIL), Math.min(w, maxX + DIL), CW, w - CW);
+    const ys = positions(Math.max(0, minY - DIL), Math.min(h, maxY + DIL), CH, h - CH);
+    const tiles = [];
+    for (const y0 of ys) for (const x0 of xs) {
+      let has = false;
+      for (let yy = y0; yy < y0 + CH && !has; yy++) { const r = yy * w; for (let xx = x0; xx < x0 + CW; xx++) if (dmask[r + xx]) { has = true; break; } }
+      if (has) tiles.push({ x0, y0 });
     }
 
-    onLog?.(`mask bbox ${maxX-minX+1}×${maxY-minY+1} @ (${minX},${minY}) · ${tiles.length} 块推理`);
+    onLog?.(`mask bbox ${bw}×${bh} @ (${minX},${minY}) · 外扩${DIL}px · ${CW}×${CH} 原分辨率 · ${tiles.length} 块推理`);
 
     const result = new Uint8ClampedArray(imageData.data);
     const srcCv = newCanvas(w, h);
     srcCv.getContext('2d').putImageData(imageData, 0, 0);
+    const plane = TILE * TILE;
 
     for (let ti = 0; ti < tiles.length; ti++) {
-      const { x0, y0, x1, y1 } = tiles[ti];
-      const tw = x1 - x0, th = y1 - y0;
+      const { x0, y0 } = tiles[ti];
       onProgress(ti / tiles.length);
 
-      // crop the source tile and scale to 512²
+      // crop CW×CH NATIVE (1:1, no scaling) into a 512² canvas; edge-replicate pad
       const inCv = newCanvas(TILE, TILE);
       const ictx = inCv.getContext('2d');
-      ictx.imageSmoothingQuality = 'high';
-      ictx.drawImage(srcCv, x0, y0, tw, th, 0, 0, TILE, TILE);
+      ictx.imageSmoothingEnabled = false;
+      ictx.drawImage(srcCv, x0, y0, CW, CH, 0, 0, CW, CH);
+      if (CW < TILE) ictx.drawImage(inCv, CW - 1, 0, 1, CH, CW, 0, TILE - CW, CH);
+      if (CH < TILE) ictx.drawImage(inCv, 0, CH - 1, TILE, 1, 0, CH, TILE, TILE - CH);
       const tileImg = ictx.getImageData(0, 0, TILE, TILE);
 
-      // build the matching 512² mask
-      const maskLocal = new ImageData(tw, th);
-      for (let yy = 0; yy < th; yy++) {
-        const sr = (y0 + yy) * w, dr = yy * tw;
-        for (let xx = 0; xx < tw; xx++) {
-          const v = mask[sr + (x0 + xx)] ? 255 : 0;
-          const pi = (dr + xx) * 4;
-          maskLocal.data[pi] = v; maskLocal.data[pi+1] = v; maskLocal.data[pi+2] = v; maskLocal.data[pi+3] = 255;
-        }
-      }
-      const mlCv = newCanvas(tw, th);
-      mlCv.getContext('2d').putImageData(maskLocal, 0, 0);
+      // matching 512² mask (1:1, pad = 0)
       const mtCv = newCanvas(TILE, TILE);
       const mctx = mtCv.getContext('2d');
-      mctx.imageSmoothingEnabled = false;
-      mctx.drawImage(mlCv, 0, 0, TILE, TILE);
-      const maskTileImg = mctx.getImageData(0, 0, TILE, TILE);
-
-      const od = await runTile(tileImg, maskTileImg);
-
-      // model output 512² → ImageData
-      const plane = TILE * TILE;
-      const outTileCv = newCanvas(TILE, TILE);
-      const outImg = outTileCv.getContext('2d').createImageData(TILE, TILE);
-      for (let i = 0; i < plane; i++) {
-        outImg.data[i*4]   = Math.max(0, Math.min(255, Math.round(od[i] * 255)));
-        outImg.data[i*4+1] = Math.max(0, Math.min(255, Math.round(od[plane + i] * 255)));
-        outImg.data[i*4+2] = Math.max(0, Math.min(255, Math.round(od[plane*2 + i] * 255)));
-        outImg.data[i*4+3] = 255;
-      }
-      outTileCv.getContext('2d').putImageData(outImg, 0, 0);
-
-      // scale tile output back to source resolution
-      const scaledCv = newCanvas(tw, th);
-      const sctx = scaledCv.getContext('2d');
-      sctx.imageSmoothingQuality = 'high';
-      sctx.drawImage(outTileCv, 0, 0, tw, th);
-      const scaled = sctx.getImageData(0, 0, tw, th);
-
-      // composite ONLY where masked (tile overlaps never double-paint kept pixels)
-      for (let yy = 0; yy < th; yy++) {
-        const sr = (y0 + yy) * w, lr = yy * tw;
-        for (let xx = 0; xx < tw; xx++) {
-          const gi = sr + (x0 + xx);
-          if (!mask[gi]) continue;
-          const lp = (lr + xx) * 4, gp = gi * 4;
-          result[gp]   = scaled.data[lp];
-          result[gp+1] = scaled.data[lp+1];
-          result[gp+2] = scaled.data[lp+2];
+      const mImg = mctx.createImageData(TILE, TILE);
+      for (let yy = 0; yy < CH; yy++) {
+        const sr = (y0 + yy) * w, dr = yy * TILE;
+        for (let xx = 0; xx < CW; xx++) {
+          const v = dmask[sr + (x0 + xx)] ? 255 : 0;
+          const pi = (dr + xx) * 4;
+          mImg.data[pi] = v; mImg.data[pi+1] = v; mImg.data[pi+2] = v; mImg.data[pi+3] = 255;
         }
       }
-      // yield so the UI can paint progress
+      mctx.putImageData(mImg, 0, 0);
+      const maskTileImg = mctx.getImageData(0, 0, TILE, TILE);
+
+      const od = await runTile(tileImg, maskTileImg);   // CHW 0..1, 512², native-aligned
+
+      // composite back 1:1 with feathered alpha — no downscale, full detail
+      for (let yy = 0; yy < CH; yy++) {
+        const sr = (y0 + yy) * w, trow = yy * TILE;
+        for (let xx = 0; xx < CW; xx++) {
+          const gi = sr + (x0 + xx);
+          const a = alpha[gi];
+          if (a <= 0.003) continue;
+          const ti2 = trow + xx, gp = gi * 4;
+          const lr = od[ti2] * 255, lg = od[plane + ti2] * 255, lb = od[plane * 2 + ti2] * 255;
+          result[gp]   = result[gp]   * (1 - a) + lr * a;
+          result[gp+1] = result[gp+1] * (1 - a) + lg * a;
+          result[gp+2] = result[gp+2] * (1 - a) + lb * a;
+        }
+      }
       await new Promise(r => setTimeout(r, 0));
     }
     onProgress(1);

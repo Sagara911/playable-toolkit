@@ -259,6 +259,7 @@
     { id: 'sfx-maker',      cat: 'av',    name: '8-bit 音效',     en: 'SFX Maker',       icon: '🎮', href: 'tools/sfx-maker.html',      desc: '8-bit 游戏音效生成器,7 个经典预设 + 可调波形 / 包络 / 滤波,导出 WAV/Opus' },
     { id: 'screen-recorder',cat: 'av',    name: '屏幕录制',       en: 'Screen Recorder', icon: '📺', href: 'tools/screen-recorder.html', desc: '浏览器原生 getDisplayMedia 录屏 + 麦克风 + 摄像头叠加,直接出 WebM,零上传' },
     { id: 'video-watermark',cat: 'av',    name: '视频去水印',     en: 'Video Watermark', icon: '🎭', href: 'tools/video-watermark.html',desc: '圈出水印,AI LaMa 神经网络补全 / 时序中值还原 / 快速涂抹,WebCodecs 帧精确重编码并保留音频' },
+    { id: 'video-upscale',  cat: 'av',    name: 'AI 超分辨率',    en: 'AI Upscale',      icon: '🔬', href: 'tools/video-upscale.html',  desc: '视频/图片神经网络超分放大(Real-ESRGAN / Real-CUGAN,TF.js + WebGPU),多模型可选,逐帧重编码保留音频,纯本地' },
     // 代码 / 打包
     { id: 'html-inliner',   cat: 'code',  name: '单文件打包',     en: 'HTML Inliner',    icon: '📄', href: 'tools/html-inliner.html',   desc: '把外部 JS/CSS/图片内联为单 HTML' },
     { id: 'code-minify',    cat: 'code',  name: '代码压缩',       en: 'Code Minify',     icon: '🗜️', href: 'tools/code-minify.html',    desc: 'JS / CSS / HTML 压缩,JS 用 terser' },
@@ -345,6 +346,12 @@
       '选「去水印引擎」:**AI·背景静止**(固定机位最佳,一次推理复用)/ **AI·逐帧**(任意场景最强但慢)/ **时序中值**(移动·半透明水印无模型还原)/ 快速涂抹(角落·边缘·纯色)',
       'AI 首次用需联网下载 ~200MB LaMa 模型(WebGPU,需 Chrome/Edge 113+),之后浏览器缓存复用',
       '点「开始处理」—— WebCodecs 帧精确重编码出 MP4,自动复用原音轨(失败则输出无声并提示)'
+    ],
+    'video-upscale': [
+      '拖入**视频或图片** → 选模型 → 「开始处理」。神经网络放大并增清晰,纯本地(TF.js + WebGPU,需 Chrome/Edge 113+)',
+      '**模型按场景选**:动漫/游戏/像素风用 **anime**(极速或最佳),真人/风景/截图用 **General x4** 或 **Real-CUGAN 2×**;首次用某模型联网下权重(1~9MB)后浏览器缓存',
+      '**输出倍数**可调:原生(4×/2×)/ 2× / 1.5× / 1×(只增清晰不放大);倍数越小越快、体积越小',
+      '视频逐帧 GPU 推理**很重**,长视频/高分辨率会慢 —— 超分本就为低清放大,输入别太大;视频要快优先 Real-CUGAN 2×。视频输出 MP4 并保留音频,图片输出 PNG'
     ],
     'composer': [
       '拖入多张图片(可在素材列表上下调整顺序或删除)',
@@ -1457,6 +1464,7 @@
     'watermark-remove':['image/png','image/jpeg','image/webp','image/gif'],
     'video-toolkit':   ['video/*','image/png','image/jpeg','image/webp','application/zip'],
     'video-watermark': ['video/*'],
+    'video-upscale':   ['video/*','image/png','image/jpeg','image/webp'],
     'composer':        ['image/png','image/jpeg','image/webp','image/gif','application/zip'],
     'image-diff':      ['image/png','image/jpeg','image/webp','image/gif'],
     'svg-tools':       ['image/svg+xml'],

@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap">
+<!-- KILLSWITCH v2 -->
+<script>
+(function () {
+  var KEY = 'toolkit-cleaned-v2';
+  if (localStorage.getItem(KEY)) return;
+  localStorage.setItem(KEY, '1');
+  (async function () {
+    try {
+      if ('serviceWorker' in navigator) { var regs = await navigator.serviceWorker.getRegistrations(); for (var r of regs) { try { await r.unregister(); } catch (_) {} } }
+      if ('caches' in window) { var ks = await caches.keys(); for (var k of ks) { try { await caches.delete(k); } catch (_) {} } }
+      try { localStorage.removeItem('toolkit-cursor'); } catch (_) {}
+      try { localStorage.removeItem('toolkit-theme'); } catch (_) {}
+      var stale = document.getElementById('__toolkit_cursor_style__');
+      if (stale) stale.remove();
+      document.documentElement.removeAttribute('data-theme');
+      location.reload();
+    } catch (e) { console.warn('[cleanup]', e); }
+  })();
+})();
+</script>
+<title>AI 超分辨率 · Dobby</title>
+<link rel="stylesheet" href="../assets/shared.css" />
+<style>
+  .compare-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+  .compare-pane { flex: 1 1 360px; min-width: 0; }
+  .compare-pane h3 {
+    margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--muted);
+    letter-spacing: 0.02em; display: flex; align-items: center; gap: 6px;
+  }
+  .compare-pane h3 .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .compare-pane.before h3 .dot { background: #ff8080; }
+  .compare-pane.after  h3 .dot { background: var(--jade); }
+  .media-box {
+    position: relative; border: 1px solid var(--border); border-radius: var(--radius);
+    overflow: auto; background: var(--checker), #0a0a0c;
+    background-size: 20px 20px; background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+    max-height: 70vh; display: flex; align-items: center; justify-content: center; min-height: 200px;
+  }
+  .media-box video, .media-box img, .media-box canvas { display: block; max-width: 100%; height: auto; }
+  .after-empty {
+    aspect-ratio: 16/9; width: 100%; display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 12px; text-align: center; padding: 12px;
+    border: 1px dashed var(--border); border-radius: var(--radius);
+  }
+  .method-help { font-size: 11px; color: var(--muted); line-height: 1.55; margin: -2px 0 8px; }
+  .vw-notice {
+    background: rgba(80, 220, 200, 0.07); border: 1px solid rgba(80, 220, 200, 0.25);
+    border-left: 3px solid rgba(80, 220, 200, 0.6); color: var(--text-soft);
+    padding: 8px 10px; border-radius: var(--radius-sm); font-size: 11px; line-height: 1.55; margin: 4px 0 10px;
+  }
+  .vw-warn {
+    background: rgba(245, 165, 75, 0.08); border: 1px solid rgba(245, 165, 75, 0.3);
+    border-left: 3px solid rgba(245, 165, 75, 0.7); color: var(--text-soft);
+    padding: 8px 10px; border-radius: var(--radius-sm); font-size: 11px; line-height: 1.55; margin-bottom: 10px;
+  }
+</style>
+</head>
+<body>
+
+<div class="tool-layout">
+  <div class="sidebar">
+    <h1>🔬 AI 超分辨率</h1>
+
+    <div class="drop-zone" id="dropZone">
+      <p>📂 拖入视频或图片</p>
+      <p class="hint">视频 MP4 / WebM / MOV · 图片 PNG / JPG / WebP<br/>神经网络放大 + 增清晰,纯本地</p>
+      <input type="file" id="fileInput" accept="video/*,image/*" style="display:none" />
+    </div>
+
+    <h2>模型</h2>
+    <div class="field">
+      <select id="model">
+        <option value="anime_fast">动漫/游戏 · 极速 (4× · AnimeVideo v3)</option>
+        <option value="general_fast" selected>通用 · 均衡 (4× · General x4 v3)</option>
+        <option value="anime_plus">动漫/游戏 · 最佳 (4× · x4plus Anime 6B)</option>
+        <option value="cugan2x">通用 · 2× 快速 (Real-CUGAN)</option>
+      </select>
+    </div>
+    <div class="method-help" id="modelHelp"></div>
+    <div class="vw-notice" id="aiNotice">
+      🧠 用 TensorFlow.js + <strong>WebGPU</strong> 跑 Real-ESRGAN / Real-CUGAN 神经网络,纯本地。首次选某模型需联网下载权重(1~9MB,之后浏览器缓存)。需 Chrome / Edge 113+。
+    </div>
+
+    <h2>输出</h2>
+    <div class="field">
+      <label>输出倍数</label>
+      <select id="outScale">
+        <option value="native" selected>原生(模型倍数)</option>
+        <option value="2">2×(把 4× 结果缩到 2×,更清晰但不放那么大)</option>
+        <option value="1.5">1.5×</option>
+        <option value="1">1×(只增清晰,不放大)</option>
+      </select>
+    </div>
+    <div id="videoOpts">
+      <div class="field"><label>帧率 (fps)</label><input type="number" id="fps" value="30" min="1" max="60" /></div>
+      <div class="field"><label>码率 (kbps)</label><input type="number" id="bitrate" value="8000" min="1000" max="80000" /></div>
+    </div>
+    <div class="field"><label>文件名前缀</label><input type="text" id="filename" value="upscaled" /></div>
+
+    <button id="processBtn" disabled>开始处理</button>
+    <button id="clearBtn" class="secondary">清空</button>
+
+    <div class="vw-warn" id="speedWarn" style="display:none">
+      ⏱ <strong>视频逐帧超分很重</strong> —— 每帧切块跑 GPU 推理,长视频/高分辨率可能要几分钟到很久。建议:输入分辨率别太大(超分本就是给低清放大的)、动漫/游戏用 anime 模型、要快可选 Real-CUGAN 2× 或更小的「输出倍数」。处理时别切走标签页。
+    </div>
+
+    <div class="progress" id="progress"><div class="progress-bar"></div></div>
+    <div class="log" id="log"></div>
+  </div>
+
+  <div class="main">
+    <div class="stats" id="stats">Dobby 待命 · 拖入视频或图片开始</div>
+    <div class="compare-row" id="compareRow" style="display:none">
+      <div class="compare-pane before">
+        <h3><span class="dot"></span><span>原始</span></h3>
+        <div class="media-box" id="beforeBox">
+          <video id="srcVideo" controls preload="auto" playsinline muted style="display:none"></video>
+          <img id="srcImg" style="display:none" alt="source" />
+        </div>
+      </div>
+      <div class="compare-pane after">
+        <h3><span class="dot"></span><span id="afterTitle">超分后</span></h3>
+        <div class="media-box" id="afterBox">
+          <div class="after-empty" id="afterEmpty">处理后显示在这里</div>
+          <video id="afterVideo" controls playsinline style="display:none"></video>
+          <canvas id="afterCanvas" style="display:none"></canvas>
+        </div>
+        <div id="afterActions" style="display:none; margin-top:10px; gap:10px; align-items:center; flex-wrap:wrap">
+          <button id="downloadBtn">💾 下载</button>
+          <span class="mono" id="outInfo" style="color:var(--muted); font-size:12px"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/shared.js"></script>
+<script src="../assets/esrgan.js"></script>
+<script>
+Toolkit.injectTopbar('video-upscale');
+
+(() => {
+  const { $, makeLogger, makeProgress, attachDropZone, download, newCanvas, fmtBytes } = Toolkit;
+  const log = makeLogger($('log'));
+  const progress = makeProgress($('progress'));
+  const handoff = Toolkit.setupHandoff('video-upscale', { outputType: 'video/mp4' });
+
+  let srcFile = null, kind = null;       // 'video' | 'image'
+  let outBlob = null, outExt = 'mp4';
+  const video = $('srcVideo'), img = $('srcImg');
+
+  const MODEL_HELP = {
+    anime_fast:   '4× · 最快。动漫、插画、游戏录屏/像素风首选,锐利干净。真人实拍会偏「画风化」。',
+    general_fast: '4× · 速度与质量均衡的通用模型。真人、风景、截图都适用。默认推荐。',
+    anime_plus:   '4× · 动漫最佳质量(6B 大模型),细节最足但每帧最慢(约 5× 于极速版)。短视频/图片值得。',
+    cugan2x:      '2× · Real-CUGAN,放大倍数小、速度快、对真实照片/视频更自然,**视频最实用**。',
+  };
+
+  attachDropZone($('dropZone'), $('fileInput'), files => handleFiles(files));
+
+  function onModelChange() { $('modelHelp').textContent = MODEL_HELP[$('model').value] || ''; }
+  $('model').addEventListener('change', onModelChange);
+  onModelChange();
+
+  async function handleFiles(files) {
+    if (!files.length) return;
+    const f = files[0];
+    const isVideo = f.type.startsWith('video/');
+    const isImage = f.type.startsWith('image/');
+    if (!isVideo && !isImage) { log.err('请拖入视频或图片文件'); return; }
+    srcFile = f; kind = isVideo ? 'video' : 'image';
+    log.clear();
+    outBlob = null;
+    resetAfterPane();
+    $('compareRow').style.display = '';
+    $('videoOpts').style.display = isVideo ? '' : 'none';
+    $('speedWarn').style.display = isVideo ? '' : 'none';
+    $('afterTitle').textContent = '超分后';
+
+    if (isVideo) {
+      img.style.display = 'none'; video.style.display = '';
+      const url = URL.createObjectURL(f); video.src = url; video.muted = true;
+      await new Promise((res, rej) => { video.onloadedmetadata = () => res(); video.onerror = () => rej(new Error('视频加载失败')); }).catch(e => log.err(e.message));
+      if (!video.videoWidth) { log.err('视频元数据加载失败'); return; }
+      const m = window.SR.MODELS[$('model').value];
+      log.ok(`视频已加载 · ${video.videoWidth}×${video.videoHeight} · ${video.duration.toFixed(2)}s`);
+      $('stats').innerHTML = `<strong>${video.videoWidth}×${video.videoHeight}</strong> · ${video.duration.toFixed(2)}s · ${fmtBytes(f.size)} · 预计输出 <strong>${video.videoWidth*m.scale}×${video.videoHeight*m.scale}</strong>`;
+      detectFps();
+    } else {
+      video.style.display = 'none'; img.style.display = '';
+      const url = URL.createObjectURL(f); img.src = url;
+      await new Promise((res, rej) => { img.onload = res; img.onerror = () => rej(new Error('图片加载失败')); }).catch(e => log.err(e.message));
+      log.ok(`图片已加载 · ${img.naturalWidth}×${img.naturalHeight}`);
+      $('stats').innerHTML = `<strong>${img.naturalWidth}×${img.naturalHeight}</strong> · ${fmtBytes(f.size)}`;
+    }
+    $('processBtn').disabled = false;
+  }
+
+  function detectFps() {
+    if (!('requestVideoFrameCallback' in HTMLVideoElement.prototype)) return;
+    let count = 0, first = null, done = false;
+    const finish = (fps) => { if (done) return; done = true; try { video.pause(); video.currentTime = 0; } catch (_) {} if (fps && isFinite(fps)) $('fps').value = Math.min(60, Math.max(1, Math.round(fps))); };
+    const cb = (now, meta) => { if (done) return; if (first === null) first = meta.mediaTime; count++; if (count >= 10) { const dt = meta.mediaTime - first; finish(dt > 0 ? (count - 1) / dt : 30); return; } video.requestVideoFrameCallback(cb); };
+    video.muted = true;
+    video.play().then(() => video.requestVideoFrameCallback(cb)).catch(() => finish(30));
+    setTimeout(() => finish(30), 2500);
+  }
+
+  function resetAfterPane() {
+    const av = $('afterVideo');
+    if (av.src) { try { URL.revokeObjectURL(av.src); } catch (_) {} av.removeAttribute('src'); av.load(); }
+    av.style.display = 'none';
+    $('afterCanvas').style.display = 'none';
+    $('afterActions').style.display = 'none';
+    $('afterEmpty').style.display = '';
+  }
+
+  function seekVideo(t) {
+    return new Promise((res) => {
+      const onS = () => { video.removeEventListener('seeked', onS); res(); };
+      video.addEventListener('seeked', onS);
+      try { video.currentTime = Math.min(Math.max(0, t), Math.max(0, video.duration - 0.001)); } catch (_) { video.removeEventListener('seeked', onS); res(); }
+    });
+  }
+
+  // optionally rescale the native SR output to the user's target multiplier
+  function applyOutScale(srCanvas, srcW, modelScale) {
+    const sel = $('outScale').value;
+    if (sel === 'native') return srCanvas;
+    const target = parseFloat(sel);
+    const targetW = Math.round(srcW * target);
+    if (targetW === srCanvas.width) return srCanvas;
+    const cv = newCanvas(targetW, Math.round(srCanvas.height * (targetW / srCanvas.width)));
+    const c = cv.getContext('2d'); c.imageSmoothingQuality = 'high';
+    c.drawImage(srCanvas, 0, 0, cv.width, cv.height);
+    return cv;
+  }
+
+  async function decodeAudio() {
+    try {
+      const buf = await srcFile.arrayBuffer();
+      const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null;
+      const ac = new AC(); const audioBuf = await ac.decodeAudioData(buf.slice(0)); try { ac.close(); } catch (_) {}
+      return (audioBuf && audioBuf.length) ? audioBuf : null;
+    } catch (e) { log.warn('音频解码失败,输出将无声:' + (e.message || e)); return null; }
+  }
+  function feedAudio(audioBuf, encoder) {
+    const numCh = audioBuf.numberOfChannels, sr = audioBuf.sampleRate, total = audioBuf.length, CH = Math.round(sr * 0.5);
+    for (let off = 0; off < total; off += CH) {
+      const len = Math.min(CH, total - off);
+      const planar = new Float32Array(numCh * len);
+      for (let c = 0; c < numCh; c++) planar.set(audioBuf.getChannelData(c).subarray(off, off + len), c * len);
+      const ad = new AudioData({ format: 'f32-planar', sampleRate: sr, numberOfFrames: len, numberOfChannels: numCh, timestamp: Math.round(off / sr * 1e6), data: planar });
+      encoder.encode(ad); ad.close();
+    }
+  }
+  async function pickH264(w, h, fps, bitrate) {
+    const cands = ['avc1.640034','avc1.640033','avc1.640032','avc1.64002A','avc1.640028','avc1.4D0034','avc1.4D0032','avc1.42E032','avc1.42E01E'];
+    for (const c of cands) { try { const s = await VideoEncoder.isConfigSupported({ codec: c, width: w, height: h, bitrate, framerate: fps }); if (s && s.supported) return c; } catch (_) {} }
+    return 'avc1.42E01E';
+  }
+
+  // ─── image path ───
+  async function processImage(modelKey) {
+    await window.SR.prepare(modelKey, { onStatus: s => log.dim(s), onProgress: p => progress.set(p * 0.5) });
+    const src = newCanvas(img.naturalWidth, img.naturalHeight);
+    src.getContext('2d').drawImage(img, 0, 0);
+    log.dim('超分推理中(切块 GPU 推理)...');
+    let res = await window.SR.upscaleCanvas(src, { onProgress: p => progress.set(0.5 + p * 0.5) });
+    res = applyOutScale(res, img.naturalWidth, window.SR.scale());
+    const blob = await new Promise(r => res.toBlob(r, 'image/png'));
+    return { blob, w: res.width, h: res.height, frames: 1, audio: false, ext: 'png', mime: 'image/png' };
+  }
+
+  // ─── video path (WebCodecs) ───
+  async function processVideo(modelKey) {
+    if (!('VideoEncoder' in window) || !('VideoFrame' in window)) throw new Error('当前浏览器不支持 WebCodecs — 需要 Chrome / Edge 113+');
+    await window.SR.prepare(modelKey, { onStatus: s => log.dim(s), onProgress: p => progress.set(p * 0.15) });
+
+    const fps = Math.min(60, Math.max(1, parseInt($('fps').value, 10) || 30));
+    const bitrate = (parseInt($('bitrate').value, 10) || 8000) * 1000;
+    // probe output dims with one upscaled frame
+    await seekVideo(0);
+    const probe = newCanvas(video.videoWidth, video.videoHeight);
+    probe.getContext('2d').drawImage(video, 0, 0);
+    let sr0 = await window.SR.upscaleCanvas(probe, {});
+    sr0 = applyOutScale(sr0, video.videoWidth, window.SR.scale());
+    const outW = Math.max(2, sr0.width - (sr0.width % 2));
+    const outH = Math.max(2, sr0.height - (sr0.height % 2));
+    log.dim(`输出分辨率 ${outW}×${outH}`);
+
+    const audioBuf = await decodeAudio();
+    const { Muxer, ArrayBufferTarget } = await import('https://esm.sh/mp4-muxer@5.1.5');
+    const muxCfg = { target: new ArrayBufferTarget(), video: { codec: 'avc', width: outW, height: outH }, fastStart: 'in-memory' };
+    if (audioBuf) muxCfg.audio = { codec: 'aac', numberOfChannels: audioBuf.numberOfChannels, sampleRate: audioBuf.sampleRate };
+    const muxer = new Muxer(muxCfg);
+
+    let encErr = null;
+    const vEnc = new VideoEncoder({ output: (c, m) => muxer.addVideoChunk(c, m), error: e => { encErr = e; log.err('video encoder: ' + e.message); } });
+    vEnc.configure({ codec: await pickH264(outW, outH, fps, bitrate), width: outW, height: outH, bitrate, framerate: fps });
+
+    let aEnc = null;
+    if (audioBuf) {
+      try {
+        aEnc = new AudioEncoder({ output: (c, m) => muxer.addAudioChunk(c, m), error: e => log.warn('audio encoder: ' + e.message) });
+        aEnc.configure({ codec: 'mp4a.40.2', sampleRate: audioBuf.sampleRate, numberOfChannels: audioBuf.numberOfChannels, bitrate: 128000 });
+        feedAudio(audioBuf, aEnc);
+      } catch (e) { log.warn('音频编码不可用,输出无声:' + (e.message || e)); aEnc = null; }
+    }
+
+    const frameCv = newCanvas(outW, outH);
+    const fctx = frameCv.getContext('2d');
+    const numFrames = Math.max(1, Math.round(video.duration * fps));
+    const probeCv = newCanvas(video.videoWidth, video.videoHeight);
+    const pctx = probeCv.getContext('2d', { willReadFrequently: true });
+
+    for (let i = 0; i < numFrames; i++) {
+      while (vEnc.encodeQueueSize > 8) await new Promise(r => setTimeout(r, 20));
+      await seekVideo(i / fps);
+      pctx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+      let sr = await window.SR.upscaleCanvas(probeCv, {});
+      sr = applyOutScale(sr, video.videoWidth, window.SR.scale());
+      fctx.clearRect(0, 0, outW, outH);
+      fctx.drawImage(sr, 0, 0, outW, outH);
+      const vf = new VideoFrame(frameCv, { timestamp: Math.round(i / fps * 1e6) });
+      vEnc.encode(vf, { keyFrame: i % fps === 0 });
+      vf.close();
+      progress.set(0.15 + (i / numFrames) * 0.85);
+    }
+
+    await vEnc.flush(); vEnc.close();
+    if (aEnc) { try { await aEnc.flush(); aEnc.close(); } catch (_) {} }
+    muxer.finalize();
+    if (encErr) throw new Error('编码失败:' + encErr.message);
+    return { blob: new Blob([muxer.target.buffer], { type: 'video/mp4' }), w: outW, h: outH, frames: numFrames, audio: !!aEnc, ext: 'mp4', mime: 'video/mp4' };
+  }
+
+  $('processBtn').addEventListener('click', async () => {
+    if (!srcFile) return;
+    const modelKey = $('model').value;
+    $('processBtn').disabled = true; $('processBtn').textContent = '处理中...';
+    progress.set(0); resetAfterPane();
+    log.dim(`模型:${modelKey} · 类型:${kind}`);
+    const t0 = performance.now();
+    try {
+      const r = kind === 'video' ? await processVideo(modelKey) : await processImage(modelKey);
+      progress.hide();
+      if (!r.blob || r.blob.size < 256) throw new Error('输出异常(太小)');
+      outBlob = r.blob; outExt = r.ext;
+      const name = ($('filename').value || 'upscaled').replace(/[^\w-]/g, '_');
+      const url = URL.createObjectURL(r.blob);
+      $('afterEmpty').style.display = 'none';
+      if (kind === 'video') {
+        const av = $('afterVideo'); av.src = url; av.style.display = '';
+      } else {
+        const ac = $('afterCanvas'); const im = new Image();
+        await new Promise(res => { im.onload = res; im.src = url; });
+        ac.width = r.w; ac.height = r.h; ac.getContext('2d').drawImage(im, 0, 0); ac.style.display = '';
+      }
+      $('afterActions').style.display = 'flex';
+      $('outInfo').textContent = `${r.w}×${r.h} · ${r.frames > 1 ? r.frames + ' 帧 · ' : ''}${fmtBytes(r.blob.size)} · ${r.audio ? '含音频 · ' : (kind === 'video' ? '无音频 · ' : '')}耗时 ${((performance.now() - t0) / 1000).toFixed(1)}s`;
+      handoff?.setBlob(r.blob, `${name}.${r.ext}`, r.mime);
+      log.ok(`完成 · ${r.w}×${r.h} · ${fmtBytes(r.blob.size)} — 结果在右侧,下面有下载按钮`);
+      requestAnimationFrame(() => { $('afterBox').animate([{ boxShadow: '0 0 0 0 rgba(var(--jade-rgb),0)' }, { boxShadow: '0 0 0 14px rgba(var(--jade-rgb),0.5)' }, { boxShadow: '0 0 0 0 rgba(var(--jade-rgb),0)' }], { duration: 1200, easing: 'ease-out' }); });
+    } catch (e) {
+      progress.hide(); log.err(e.message || String(e)); console.error(e);
+    } finally {
+      $('processBtn').disabled = false; $('processBtn').textContent = '开始处理';
+    }
+  });
+
+  $('downloadBtn').addEventListener('click', () => {
+    if (!outBlob) return;
+    const name = ($('filename').value || 'upscaled').replace(/[^\w-]/g, '_');
+    download(outBlob, `${name}.${outExt}`);
+  });
+
+  $('clearBtn').addEventListener('click', () => {
+    srcFile = null; kind = null; outBlob = null;
+    if (video.src) URL.revokeObjectURL(video.src); video.removeAttribute('src'); video.load();
+    if (img.src) { try { URL.revokeObjectURL(img.src); } catch (_) {} img.removeAttribute('src'); }
+    $('compareRow').style.display = 'none';
+    resetAfterPane();
+    $('stats').textContent = 'Dobby 待命 · 拖入视频或图片开始';
+    $('processBtn').disabled = true;
+    log.clear(); $('fileInput').value = '';
+  });
+})();
+</script>
+</body>
+</html>

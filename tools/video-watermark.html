@@ -137,18 +137,6 @@
     border: 1px dashed var(--border);
     border-radius: var(--radius-sm);
   }
-  #outputBox {
-    margin-top: 16px;
-    display: none;
-    border-top: 1px solid var(--border);
-    padding-top: 16px;
-  }
-  #outputBox video {
-    width: 100%;
-    max-width: 100%;
-    border-radius: var(--radius);
-    background: #000;
-  }
   .vw-warn {
     background: rgba(245, 165, 75, 0.08);
     border: 1px solid rgba(245, 165, 75, 0.3);
@@ -270,15 +258,12 @@
       <div class="compare-pane after">
         <h3><span class="dot"></span><span data-i18n="vw.after">去水印后 · 预览</span></h3>
         <canvas id="afterCanvas"></canvas>
+        <video id="afterVideo" controls playsinline style="display:none; width:100%; height:auto; border-radius:var(--radius); background:#000; border:1px solid var(--border)"></video>
         <div class="after-empty" id="afterEmpty">还没圈任何水印 · 在左边拖矩形</div>
-      </div>
-    </div>
-    <div id="outputBox">
-      <h2 style="margin-top:0" data-i18n="vw.output.title">处理结果</h2>
-      <video id="outVideo" controls playsinline></video>
-      <div style="margin-top:10px; display:flex; gap:10px; align-items:center">
-        <button id="downloadBtn" data-i18n="common.download">💾 下载</button>
-        <span class="mono" id="outInfo" style="color:var(--muted); font-size:12px"></span>
+        <div id="afterActions" style="display:none; margin-top:10px; gap:10px; align-items:center; flex-wrap:wrap">
+          <button id="downloadBtn" data-i18n="common.download">💾 下载</button>
+          <span class="mono" id="outInfo" style="color:var(--muted); font-size:12px"></span>
+        </div>
       </div>
     </div>
   </div>
@@ -343,7 +328,7 @@ Toolkit.injectTopbar('video-watermark');
     masks = [];
     renderMaskList();
     $('processBtn').disabled = true;
-    $('outputBox').style.display = 'none';
+    resetAfterPane();
     outBlob = null;
 
     const url = URL.createObjectURL(f);
@@ -910,27 +895,14 @@ Toolkit.injectTopbar('video-watermark');
     return { blob: new Blob(chunks, { type: mimeType }), frames, audio: true };
   }
 
-  // After processing, draw the RESULT's frame into the right "去水印后" pane —
-  // AI/temporal users naturally watch that pane, but their result otherwise only
-  // appears in the #outputBox lower down. This puts it where they're looking.
-  function showResultInAfterPane(blob) {
-    const after = $('afterCanvas'), afterEmpty = $('afterEmpty');
-    if (!after) return;
-    const v2 = document.createElement('video');
-    v2.muted = true; v2.playsInline = true;
-    v2.src = URL.createObjectURL(blob);
-    v2.addEventListener('loadeddata', () => {
-      const t = isFinite(v2.duration) && v2.duration > 0 ? Math.min(0.15, v2.duration / 2) : 0;
-      try { v2.currentTime = t; } catch (_) {}
-    }, { once: true });
-    v2.addEventListener('seeked', () => {
-      if (afterEmpty) afterEmpty.style.display = 'none';
-      after.style.display = '';
-      ensureAfterCanvasSize();
-      try { after.getContext('2d').drawImage(v2, 0, 0, after.width, after.height); } catch (_) {}
-      URL.revokeObjectURL(v2.src);
-    }, { once: true });
-    v2.addEventListener('error', () => { try { URL.revokeObjectURL(v2.src); } catch (_) {} }, { once: true });
+  // When the user starts a new run (or edits masks), tuck the previous result
+  // video away so the canvas preview / placeholder is visible again.
+  function resetAfterPane() {
+    const av = $('afterVideo');
+    if (av.src) { try { URL.revokeObjectURL(av.src); } catch (_) {} av.removeAttribute('src'); av.load(); }
+    av.style.display = 'none';
+    $('afterActions').style.display = 'none';
+    $('afterCanvas').style.display = '';
   }
 
   // ─── main ───
@@ -956,6 +928,8 @@ Toolkit.injectTopbar('video-watermark');
     $('processBtn').disabled = true;
     $('processBtn').textContent = '处理中...';
     progress.set(0);
+    resetAfterPane();   // hide any previous result; show preview/placeholder while we work
+    refreshPreview();
     log.dim(`引擎:${method} · 格式:${fmt}`);
 
     const t0 = performance.now();
@@ -978,16 +952,21 @@ Toolkit.injectTopbar('video-watermark');
       outBlob = blob;
       const name = ($('filename').value || 'video_clean').replace(/[^\w-]/g, '_');
       const outUrl = URL.createObjectURL(blob);
-      $('outVideo').src = outUrl;
-      $('outputBox').style.display = '';
-      showResultInAfterPane(blob);   // mirror the result into the right "after" pane
+      // Show the playable RESULT video right in the "去水印后" pane (where the
+      // user is looking), with the download button directly under it.
+      const av = $('afterVideo');
+      if (av.src) { try { URL.revokeObjectURL(av.src); } catch (_) {} }
+      av.src = outUrl;
+      $('afterCanvas').style.display = 'none';
+      $('afterEmpty').style.display = 'none';
+      av.style.display = '';
+      $('afterActions').style.display = 'flex';
       $('outInfo').textContent = `${frames} 帧 · ${fmtBytes(blob.size)} · ${audio ? '含音频' : '无音频'} · 耗时 ${((performance.now() - t0) / 1000).toFixed(1)}s`;
       handoff?.setBlob(blob, `${name}.${outExt}`, outExt === 'mp4' ? 'video/mp4' : 'video/webm');
-      log.ok(`完成 · ${fmtBytes(blob.size)} · ${audio ? '含音频' : '无音频'}`);
+      log.ok(`完成 · ${fmtBytes(blob.size)} · ${audio ? '含音频' : '无音频'} — 结果显示在右侧「去水印后」框,下面有下载按钮`);
       requestAnimationFrame(() => {
-        $('outputBox').scrollIntoView({ behavior: 'smooth', block: 'start' });
-        $('outputBox').animate(
-          [{ boxShadow: '0 0 0 0 rgba(var(--jade-rgb), 0)' }, { boxShadow: '0 0 0 16px rgba(var(--jade-rgb), 0.5)' }, { boxShadow: '0 0 0 0 rgba(var(--jade-rgb), 0)' }],
+        av.animate(
+          [{ boxShadow: '0 0 0 0 rgba(var(--jade-rgb), 0)' }, { boxShadow: '0 0 0 14px rgba(var(--jade-rgb), 0.5)' }, { boxShadow: '0 0 0 0 rgba(var(--jade-rgb), 0)' }],
           { duration: 1200, easing: 'ease-out' }
         );
       });
@@ -1013,7 +992,7 @@ Toolkit.injectTopbar('video-watermark');
     video.removeAttribute('src');
     video.load();
     $('compareRow').style.display = 'none';
-    $('outputBox').style.display = 'none';
+    resetAfterPane();
     renderMaskList();
     $('stats').textContent = 'Dobby 待命 · 拖入视频开始';
     $('processBtn').disabled = true;

@@ -258,7 +258,7 @@
     { id: 'audio-compress', cat: 'av',    name: '音频压缩',       en: 'Audio Compressor',icon: '🔊', href: 'tools/audio-compress.html', desc: '降采样 / 单声道 / 裁剪 / fade / WAV/Opus 输出' },
     { id: 'sfx-maker',      cat: 'av',    name: '8-bit 音效',     en: 'SFX Maker',       icon: '🎮', href: 'tools/sfx-maker.html',      desc: '8-bit 游戏音效生成器,7 个经典预设 + 可调波形 / 包络 / 滤波,导出 WAV/Opus' },
     { id: 'screen-recorder',cat: 'av',    name: '屏幕录制',       en: 'Screen Recorder', icon: '📺', href: 'tools/screen-recorder.html', desc: '浏览器原生 getDisplayMedia 录屏 + 麦克风 + 摄像头叠加,直接出 WebM,零上传' },
-    { id: 'video-watermark',cat: 'av',    name: '视频去水印',     en: 'Video Watermark', icon: '🎭', href: 'tools/video-watermark.html',desc: '在画面上画矩形圈水印,逐帧填充重编码,自动保留音频' },
+    { id: 'video-watermark',cat: 'av',    name: '视频去水印',     en: 'Video Watermark', icon: '🎭', href: 'tools/video-watermark.html',desc: '圈出水印,AI LaMa 神经网络补全 / 时序中值还原 / 快速涂抹,WebCodecs 帧精确重编码并保留音频' },
     // 代码 / 打包
     { id: 'html-inliner',   cat: 'code',  name: '单文件打包',     en: 'HTML Inliner',    icon: '📄', href: 'tools/html-inliner.html',   desc: '把外部 JS/CSS/图片内联为单 HTML' },
     { id: 'code-minify',    cat: 'code',  name: '代码压缩',       en: 'Code Minify',     icon: '🗜️', href: 'tools/code-minify.html',    desc: 'JS / CSS / HTML 压缩,JS 用 terser' },
@@ -342,8 +342,9 @@
     ],
     'video-watermark': [
       '拖入视频,在右侧画面上**拖动鼠标**圈出水印矩形(台标/字幕/弹幕都可,可圈多个)',
-      '选「填充算法」:角落插值(纯色/渐变背景最自然)/ 边缘延伸(纹理背景)/ 纯色遮挡(粗暴)',
-      '选输出格式 MP4 / WebM + 码率,点「开始处理」—— **处理时长 ≈ 视频时长**(MediaRecorder 边播边录,自动保留音频)'
+      '选「去水印引擎」:**AI·背景静止**(固定机位最佳,一次推理复用)/ **AI·逐帧**(任意场景最强但慢)/ **时序中值**(移动·半透明水印无模型还原)/ 快速涂抹(角落·边缘·纯色)',
+      'AI 首次用需联网下载 ~200MB LaMa 模型(WebGPU,需 Chrome/Edge 113+),之后浏览器缓存复用',
+      '点「开始处理」—— WebCodecs 帧精确重编码出 MP4,自动复用原音轨(失败则输出无声并提示)'
     ],
     'composer': [
       '拖入多张图片(可在素材列表上下调整顺序或删除)',

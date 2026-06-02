@@ -87,6 +87,8 @@
     justify-content: center;
     color: var(--muted);
     font-size: 12px;
+    text-align: center;
+    padding: 12px;
   }
   .mask-overlay {
     position: absolute;
@@ -158,6 +160,23 @@
     line-height: 1.55;
     margin-bottom: 10px;
   }
+  .vw-notice {
+    background: rgba(80, 220, 200, 0.07);
+    border: 1px solid rgba(80, 220, 200, 0.25);
+    border-left: 3px solid rgba(80, 220, 200, 0.6);
+    color: var(--text-soft);
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    font-size: 11px;
+    line-height: 1.55;
+    margin: 4px 0 10px;
+  }
+  .method-help {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.55;
+    margin: -2px 0 8px;
+  }
 </style>
 </head>
 <body>
@@ -181,13 +200,29 @@
     <div class="mask-empty" id="maskEmpty" data-i18n="vw.masks.empty">还没选任何区域</div>
     <button id="clearMasksBtn" class="secondary" disabled data-i18n="vw.masks.clear">清空选区</button>
 
-    <h2 data-i18n="vw.method.title">填充算法</h2>
+    <h2 data-i18n="vw.method.title">去水印引擎</h2>
     <div class="field">
       <select id="method">
-        <option value="corner" data-i18n="vw.method.corner">角落插值(快 · 纯色/渐变背景最自然)</option>
-        <option value="edge" data-i18n="vw.method.edge">边缘延伸(适合纹理背景)</option>
-        <option value="solid" data-i18n="vw.method.solid">纯色遮挡(最快粗暴)</option>
+        <optgroup label="AI 神经网络补全(最强)">
+          <option value="ai-static" selected>AI · 背景静止(一次推理复用 · 固定机位最佳)</option>
+          <option value="ai-frame">AI · 逐帧(任意场景最强 · 很慢)</option>
+        </optgroup>
+        <optgroup label="时序重建(无模型 · 真实还原)">
+          <option value="temporal">时序中值(固定机位 + 移动/半透明水印)</option>
+        </optgroup>
+        <optgroup label="快速涂抹(瞬时)">
+          <option value="corner">角落插值(纯色/渐变背景)</option>
+          <option value="edge">边缘延伸(轻纹理背景)</option>
+          <option value="solid">纯色遮挡</option>
+        </optgroup>
       </select>
+    </div>
+    <div class="method-help" id="methodHelp"></div>
+    <div class="vw-notice" id="aiNotice" style="display:none">
+      🧠 AI 用 LaMa 神经网络(WebGPU)。<strong>首次使用需联网下载 ~200MB 模型</strong>(之后浏览器缓存复用)。需要 Chrome / Edge 113+。
+    </div>
+    <div class="vw-warn" id="perframeWarn" style="display:none">
+      ⏱ 逐帧 AI 对每一帧都跑一次推理 — 长视频可能要<strong>几分钟到十几分钟</strong>。若是固定机位,改用「背景静止」会快非常多且效果相同。
     </div>
     <div class="field" id="solidColorRow" style="display:none">
       <label data-i18n="vw.solidColor">遮挡颜色</label>
@@ -198,13 +233,17 @@
     <div class="field">
       <label data-i18n="vw.format">格式</label>
       <select id="format">
-        <option value="mp4" data-i18n="vw.fmt.mp4">MP4(H.264 · 通用,需要浏览器支持)</option>
-        <option value="webm" data-i18n="vw.fmt.webm">WebM(VP9 · 始终支持)</option>
+        <option value="mp4" selected>MP4(H.264 + AAC · 帧精确 · 推荐)</option>
+        <option value="webm">WebM(VP8 · 实时录制回退 · 仅快速涂抹)</option>
       </select>
     </div>
     <div class="field">
       <label data-i18n="vw.bitrate">码率 (kbps)</label>
-      <input type="number" id="bitrate" value="3000" min="500" max="20000" />
+      <input type="number" id="bitrate" value="4000" min="500" max="40000" />
+    </div>
+    <div class="field">
+      <label>帧率 (fps)</label>
+      <input type="number" id="fps" value="30" min="1" max="60" />
     </div>
     <div class="field">
       <label data-i18n="common.filename">文件名前缀</label>
@@ -213,11 +252,6 @@
 
     <button id="processBtn" disabled data-i18n="vw.process">开始处理</button>
     <button id="clearBtn" class="secondary" data-i18n="common.clear">清空</button>
-
-    <div class="vw-warn" data-i18n-html="vw.warn">
-      ⏱ <strong>处理速度 = 视频时长 × 1</strong>(MediaRecorder 边播边录,这样能保留原视频音频)<br/>
-      长视频请耐心,处理期间请别切换标签页(浏览器可能暂停 rAF 渲染导致丢帧)
-    </div>
 
     <div class="progress" id="progress"><div class="progress-bar"></div></div>
     <div class="log" id="log"></div>
@@ -234,9 +268,9 @@
         </div>
       </div>
       <div class="compare-pane after">
-        <h3><span class="dot"></span><span data-i18n="vw.after">去水印后 · 实时预览</span></h3>
+        <h3><span class="dot"></span><span data-i18n="vw.after">去水印后 · 预览</span></h3>
         <canvas id="afterCanvas"></canvas>
-        <div class="after-empty" id="afterEmpty" data-i18n="vw.after.empty">还没圈任何水印 · 在左边拖矩形</div>
+        <div class="after-empty" id="afterEmpty">还没圈任何水印 · 在左边拖矩形</div>
       </div>
     </div>
     <div id="outputBox">
@@ -251,11 +285,12 @@
 </div>
 
 <script src="../assets/shared.js"></script>
+<script src="../assets/lama.js"></script>
 <script>
 Toolkit.injectTopbar('video-watermark');
 
 (() => {
-  const { $, makeLogger, makeProgress, attachDropZone, download, newCanvas, canvasToBlob, fmtBytes } = Toolkit;
+  const { $, makeLogger, makeProgress, attachDropZone, download, newCanvas, fmtBytes } = Toolkit;
   const log = makeLogger($('log'));
   const progress = makeProgress($('progress'));
   const handoff = Toolkit.setupHandoff('video-watermark', { outputType: 'video/mp4' });
@@ -267,21 +302,42 @@ Toolkit.injectTopbar('video-watermark');
 
   const video = $('srcVideo');
   const overlay = $('maskOverlay');
-  const previewWrap = $('previewWrap');
+
+  const METHOD_HELP = {
+    'ai-static': '只对一帧跑 AI 推理得到干净底图,复用到每一帧。固定机位(游戏 HUD、口播、固定台标)效果最好且快。背景会动则用「逐帧」或「时序」。',
+    'ai-frame':  '每一帧独立跑 AI 补全。任意场景质量最强,但很慢。适合短视频或移动背景下的复杂水印。',
+    'temporal':  '跨多帧取中值还原被偶尔遮住的真背景 — 无需模型、无模糊。最适合固定机位 + 移动/弹跳/半透明水印。不透明且不动的水印它无法还原。',
+    'corner':    '取选区四角颜色双线性插值。瞬时。纯色/渐变背景(天空、纯色块上的角标)最自然。',
+    'edge':      '取选区四边像素按距离加权混合。瞬时。轻微纹理背景比角落插值好一点。',
+    'solid':     '直接用纯色填满选区。最快最粗暴,适合只要挡住、不在意还原。',
+  };
 
   attachDropZone($('dropZone'), $('fileInput'), files => handleFiles(files));
 
-  $('method').addEventListener('change', () => {
-    $('solidColorRow').style.display = $('method').value === 'solid' ? '' : 'none';
-  });
+  function onMethodChange() {
+    const m = $('method').value;
+    $('solidColorRow').style.display = m === 'solid' ? '' : 'none';
+    $('aiNotice').style.display = m.startsWith('ai') ? '' : 'none';
+    $('perframeWarn').style.display = m === 'ai-frame' ? '' : 'none';
+    $('methodHelp').textContent = METHOD_HELP[m] || '';
+    // WebM (realtime) only supports the fast spatial methods.
+    const webmOpt = $('format').querySelector('option[value="webm"]');
+    const advanced = (m === 'ai-static' || m === 'ai-frame' || m === 'temporal');
+    if (advanced && $('format').value === 'webm') {
+      $('format').value = 'mp4';
+      log.dim('WebM 实时路径不支持 AI/时序,已切到 MP4');
+    }
+    webmOpt.disabled = advanced;
+    refreshPreview();
+  }
+  $('method').addEventListener('change', onMethodChange);
+  $('methodHelp').textContent = METHOD_HELP['ai-static'];
+  onMethodChange();
 
   async function handleFiles(files) {
     if (!files.length) return;
     const f = files[0];
-    if (!f.type.startsWith('video/')) {
-      log.err('请拖入视频文件(MP4 / WebM / MOV)');
-      return;
-    }
+    if (!f.type.startsWith('video/')) { log.err('请拖入视频文件(MP4 / WebM / MOV)'); return; }
     srcFile = f;
     log.clear();
     masks = [];
@@ -292,7 +348,7 @@ Toolkit.injectTopbar('video-watermark');
 
     const url = URL.createObjectURL(f);
     video.src = url;
-    video.muted = true;  // muted so autoplay works for the preview; we'll capture audio from the stream separately
+    video.muted = true;
     $('compareRow').style.display = '';
 
     await new Promise((res, rej) => {
@@ -300,30 +356,46 @@ Toolkit.injectTopbar('video-watermark');
       video.onerror = () => rej(new Error('视频加载失败 · 检查格式'));
     }).catch(e => log.err(e.message));
 
-    if (!video.videoWidth) {
-      log.err('视频元数据加载失败');
-      return;
-    }
+    if (!video.videoWidth) { log.err('视频元数据加载失败'); return; }
 
     log.ok(`视频已加载 · ${video.videoWidth}×${video.videoHeight} · ${video.duration.toFixed(2)}s`);
     $('stats').innerHTML = `<strong>${video.videoWidth}×${video.videoHeight}</strong> · ${video.duration.toFixed(2)}s · ${fmtBytes(f.size)}`;
     sizeOverlay();
-    $('processBtn').disabled = true;  // re-enabled once at least one mask exists
+    detectFps();
+    $('processBtn').disabled = true;
+  }
+
+  // Best-effort fps detection via requestVideoFrameCallback; falls back to 30.
+  function detectFps() {
+    if (!('requestVideoFrameCallback' in HTMLVideoElement.prototype)) return;
+    let count = 0, first = null, done = false;
+    const finish = (fps) => {
+      if (done) return; done = true;
+      try { video.pause(); video.currentTime = 0; } catch (_) {}
+      if (fps && isFinite(fps)) $('fps').value = Math.min(60, Math.max(1, Math.round(fps)));
+    };
+    const cb = (now, meta) => {
+      if (done) return;
+      if (first === null) first = meta.mediaTime;
+      count++;
+      if (count >= 10) { const dt = meta.mediaTime - first; finish(dt > 0 ? (count - 1) / dt : 30); return; }
+      video.requestVideoFrameCallback(cb);
+    };
+    const prevMuted = video.muted;
+    video.muted = true;
+    video.play().then(() => video.requestVideoFrameCallback(cb)).catch(() => finish(30));
+    setTimeout(() => { finish(30); video.muted = prevMuted; }, 2500);
   }
 
   // ─── overlay sizing & redraw ───
   function sizeOverlay() {
     if (!video.videoWidth) return;
-    // Match overlay's pixel buffer to video DISPLAYED size so rectangle drawing
-    // stays crisp on hi-DPI. Internal mask coords are in NATIVE video pixels.
     const w = video.clientWidth, h = video.clientHeight;
     overlay.width = w;
     overlay.height = h;
     refreshPreview();
   }
 
-  // Fast path used during drag: just outline + dashed in-progress rect.
-  // Skips the per-mask inpaint, which would jitter as the mouse moves.
   function redrawSelection(extraRect) {
     if (!overlay.width) return;
     const ctx = overlay.getContext('2d');
@@ -349,8 +421,6 @@ Toolkit.injectTopbar('video-watermark');
     }
   }
 
-  // Keep the after-canvas's pixel buffer in sync with its displayed size,
-  // resizing lazily (resizing a canvas clears it + costs an allocation).
   let _lastAfterW = 0;
   function ensureAfterCanvasSize() {
     const after = $('afterCanvas');
@@ -365,14 +435,9 @@ Toolkit.injectTopbar('video-watermark');
     return true;
   }
 
-  // Live preview — runs on every video frame change AND every mask edit.
-  //   Source pane (left): overlay shows the masks as red outlines + inpaint
-  //     fill INSIDE each rectangle, so the user sees the watermark disappear
-  //     in-place too.
-  //   After pane (right): a separate canvas showing the FULL frame with all
-  //     masks inpainted — that's the side-by-side compare the user asked for.
-  // Both panes always reflect the SAME current video time, so playing / scrubbing
-  // the source updates both in lockstep.
+  // Live preview. For the fast spatial methods we render the real result inline.
+  // For AI/temporal (which need offline multi-frame work) we show the raw frame
+  // with the mask outlined + a caption — the true result appears after 开始处理.
   function refreshPreview() {
     const afterEmpty = $('afterEmpty');
     if (!overlay.width) return;
@@ -380,63 +445,65 @@ Toolkit.injectTopbar('video-watermark');
     const ctx = overlay.getContext('2d');
     ctx.clearRect(0, 0, overlay.width, overlay.height);
 
-    // After-canvas: even when no masks exist yet, mirror the raw source frame
-    // so the user can see the pane is alive + in sync (it'll start showing the
-    // inpainted result the moment a mask is drawn).
     const haveAfter = ensureAfterCanvasSize();
     const after = $('afterCanvas');
     if (haveAfter) {
       const actx = after.getContext('2d');
       try { actx.drawImage(video, 0, 0, after.width, after.height); } catch (_) {}
     }
-    if (afterEmpty) afterEmpty.style.display = masks.length === 0 ? '' : 'none';
-    if (after) after.style.display = masks.length === 0 ? 'none' : '';
 
-    if (masks.length === 0) { redrawSelection(); return; }
+    const method = $('method').value;
+    const isFast = (method === 'corner' || method === 'edge' || method === 'solid');
+
+    if (masks.length === 0) {
+      if (afterEmpty) { afterEmpty.style.display = ''; afterEmpty.textContent = '还没圈任何水印 · 在左边拖矩形'; }
+      if (after) after.style.display = 'none';
+      redrawSelection();
+      return;
+    }
+    if (afterEmpty) afterEmpty.style.display = isFast ? 'none' : '';
+    if (after) after.style.display = isFast ? '' : 'none';
 
     const sx = overlay.width / video.videoWidth;
     const sy = overlay.height / video.videoHeight;
-    // Native-resolution scratch canvas — inpaint runs at full quality. We paint
-    // the result onto BOTH the overlay (mask region) and the after-canvas
-    // (full frame, scaled).
+
+    if (!isFast) {
+      // just outline the masks on the source pane; caption the after pane
+      redrawSelection();
+      if (afterEmpty) afterEmpty.textContent = method === 'temporal'
+        ? '时序重建在「开始处理」后生成 · 需要分析多帧'
+        : 'AI 补全在「开始处理」后生成 · 首帧推理后即可看到';
+      return;
+    }
+
+    // fast spatial preview, inpaint at native res then scale to both panes
     const work = newCanvas(video.videoWidth, video.videoHeight);
     const wctx = work.getContext('2d', { willReadFrequently: true });
     try { wctx.drawImage(video, 0, 0); } catch (_) { redrawSelection(); return; }
-    const method = $('method').value;
     const solidHex = $('solidColor').value || '#000';
     for (const m of masks) {
       try { inpaint(wctx, m, video.videoWidth, video.videoHeight, method, solidHex); } catch (_) {}
-      const ox = m.x * sx, oy = m.y * sy;
-      const ow = m.w * sx, oh = m.h * sy;
+      const ox = m.x * sx, oy = m.y * sy, ow = m.w * sx, oh = m.h * sy;
       ctx.drawImage(work, m.x, m.y, m.w, m.h, ox, oy, ow, oh);
       ctx.strokeStyle = '#ff8080';
       ctx.lineWidth = 2;
       ctx.strokeRect(ox + 0.5, oy + 0.5, ow - 1, oh - 1);
     }
-    // After pane: full inpainted frame (no selection markings — clean "result")
-    if (haveAfter) {
-      const actx = after.getContext('2d');
-      actx.drawImage(work, 0, 0, after.width, after.height);
-    }
+    if (haveAfter) after.getContext('2d').drawImage(work, 0, 0, after.width, after.height);
   }
-  // Re-render the preview whenever the current frame changes (playback or
-  // scrub) or when the user toggles inpaint method / solid color.
+
   video.addEventListener('timeupdate', refreshPreview);
   video.addEventListener('seeked', refreshPreview);
   video.addEventListener('play', () => { previewLoop(); });
   video.addEventListener('pause', refreshPreview);
-  $('method').addEventListener('change', refreshPreview);
   $('solidColor').addEventListener('input', refreshPreview);
 
-  // While the video plays, timeupdate fires only ~4×/s in some browsers, which
-  // looks jerky for the inpaint preview. Drive a rAF loop instead — it still
-  // costs almost nothing per frame for the typical small mask + corner algo.
   let _previewRaf = 0;
   function previewLoop() {
-    if (video.paused || video.ended || !video.videoWidth || masks.length === 0) {
-      cancelAnimationFrame(_previewRaf);
-      _previewRaf = 0;
-      return;
+    const method = $('method').value;
+    const isFast = (method === 'corner' || method === 'edge' || method === 'solid');
+    if (video.paused || video.ended || !video.videoWidth || masks.length === 0 || !isFast) {
+      cancelAnimationFrame(_previewRaf); _previewRaf = 0; return;
     }
     refreshPreview();
     _previewRaf = requestAnimationFrame(previewLoop);
@@ -468,22 +535,20 @@ Toolkit.injectTopbar('video-watermark');
     const px = Math.min(dragStart.x, cx), py = Math.min(dragStart.y, cy);
     const pw = Math.abs(cx - dragStart.x), ph = Math.abs(cy - dragStart.y);
     dragStart = null;
-    if (pw < 4 || ph < 4) { redrawOverlay(); return; }   // too small to be intentional
-    // convert overlay pixels → native video pixels
+    if (pw < 4 || ph < 4) { refreshPreview(); return; }
     const sx = video.videoWidth / overlay.width;
     const sy = video.videoHeight / overlay.height;
-    const m = {
+    masks.push({
       x: Math.max(0, Math.round(px * sx)),
       y: Math.max(0, Math.round(py * sy)),
       w: Math.min(video.videoWidth, Math.round(pw * sx)),
       h: Math.min(video.videoHeight, Math.round(ph * sy))
-    };
-    masks.push(m);
+    });
     renderMaskList();
     refreshPreview();
     $('processBtn').disabled = masks.length === 0;
   });
-  overlay.addEventListener('pointercancel', () => { dragStart = null; redrawOverlay(); });
+  overlay.addEventListener('pointercancel', () => { dragStart = null; refreshPreview(); });
 
   function renderMaskList() {
     const ul = $('maskList');
@@ -510,9 +575,7 @@ Toolkit.injectTopbar('video-watermark');
     $('processBtn').disabled = true;
   });
 
-  // ─── inpainting kernels — run per frame, per mask ───
-  // Pre-allocated reusable scratch ImageData so we don't allocate per frame.
-  let scratchData = null;
+  // ─── spatial inpaint kernels (fast methods + live preview) ───
   function inpaint(ctx, mask, fw, fh, method, solidHex) {
     const cx = Math.max(0, mask.x), cy = Math.max(0, mask.y);
     const cw = Math.min(fw - cx, mask.w), ch = Math.min(fh - cy, mask.h);
@@ -525,10 +588,6 @@ Toolkit.injectTopbar('video-watermark');
     }
 
     if (method === 'corner') {
-      // Bilinear interpolation between 4 corner colors sampled just outside
-      // the mask. Fast (4 reads + cw*ch math) and works for solid / smoothly-
-      // varying backgrounds — by far the most common watermark scenario
-      // (corner logo on TV-style footage).
       const tlX = Math.max(0, cx - 1), tlY = Math.max(0, cy - 1);
       const trX = Math.min(fw - 1, cx + cw), trY = Math.max(0, cy - 1);
       const blX = Math.max(0, cx - 1), blY = Math.min(fh - 1, cy + ch);
@@ -542,14 +601,10 @@ Toolkit.injectTopbar('video-watermark');
       const denomX = cw > 1 ? cw - 1 : 1;
       const denomY = ch > 1 ? ch - 1 : 1;
       for (let dy = 0; dy < ch; dy++) {
-        const v = dy / denomY;
-        const _1v = 1 - v;
+        const v = dy / denomY, _1v = 1 - v;
         for (let dx = 0; dx < cw; dx++) {
           const u = dx / denomX;
-          const w00 = (1 - u) * _1v;
-          const w10 = u * _1v;
-          const w01 = (1 - u) * v;
-          const w11 = u * v;
+          const w00 = (1 - u) * _1v, w10 = u * _1v, w01 = (1 - u) * v, w11 = u * v;
           const i = (dy * cw + dx) * 4;
           d[i]     = TL[0] * w00 + TR[0] * w10 + BL[0] * w01 + BR[0] * w11;
           d[i + 1] = TL[1] * w00 + TR[1] * w10 + BL[1] * w01 + BR[1] * w11;
@@ -562,11 +617,6 @@ Toolkit.injectTopbar('video-watermark');
     }
 
     if (method === 'edge') {
-      // Per-pixel weighted blend of the 4 nearest border colors (top/bottom/
-      // left/right of the mask). Each border is a strip; pixel inside picks
-      // the column from top/bottom and the row from left/right and weights
-      // by inverse distance to each edge. Captures gentle texture along the
-      // borders better than corner interpolation.
       const topY = Math.max(0, cy - 1);
       const botY = Math.min(fh - 1, cy + ch);
       const lftX = Math.max(0, cx - 1);
@@ -583,8 +633,7 @@ Toolkit.injectTopbar('video-watermark');
           const dL = dx + 1, dR = cw - dx;
           const wT = 1 / dT, wB = 1 / dB, wL = 1 / dL, wR = 1 / dR;
           const sw = wT + wB + wL + wR;
-          const i = (dy * cw + dx) * 4;
-          const tI = dx * 4, lI = dy * 4;
+          const i = (dy * cw + dx) * 4, tI = dx * 4, lI = dy * 4;
           d[i]     = (topStrip[tI]     * wT + botStrip[tI]     * wB + lftStrip[lI]     * wL + rgtStrip[lI]     * wR) / sw;
           d[i + 1] = (topStrip[tI + 1] * wT + botStrip[tI + 1] * wB + lftStrip[lI + 1] * wL + rgtStrip[lI + 1] * wR) / sw;
           d[i + 2] = (topStrip[tI + 2] * wT + botStrip[tI + 2] * wB + lftStrip[lI + 2] * wL + rgtStrip[lI + 2] * wR) / sw;
@@ -596,150 +645,336 @@ Toolkit.injectTopbar('video-watermark');
     }
   }
 
-  // ─── main processing pipeline ───
-  $('processBtn').addEventListener('click', async () => {
-    if (!srcFile || masks.length === 0) return;
-    $('processBtn').disabled = true;
-    $('processBtn').textContent = Toolkit.T('vw.processing', null, '处理中... (≈ 视频时长)');
-    progress.set(0);
-    const method = $('method').value;
-    const solidHex = $('solidColor').value || '#000';
-    const fmt = $('format').value;
-    const bitrate = (parseInt($('bitrate').value, 10) || 3000) * 1000;
-    const nameRaw = $('filename').value || 'video_clean';
-    const name = nameRaw.replace(/[^\w-]/g, '_');
+  // ─── mask / plate helpers ───
+  function buildUnionMask(w, h) {
+    const mask = new Uint8Array(w * h);
+    for (const m of masks) {
+      const x0 = Math.max(0, m.x), y0 = Math.max(0, m.y);
+      const x1 = Math.min(w, m.x + m.w), y1 = Math.min(h, m.y + m.h);
+      for (let y = y0; y < y1; y++) { const r = y * w; for (let x = x0; x < x1; x++) mask[r + x] = 1; }
+    }
+    return mask;
+  }
 
+  // Build a canvas that holds ONLY the inpainted masked pixels (rest transparent)
+  // so a single drawImage composites the "clean plate" over each frame.
+  function plateOverlay(plateImageData, mask, w, h) {
+    const cv = newCanvas(w, h);
+    const ctx = cv.getContext('2d');
+    const od = ctx.createImageData(w, h);
+    const s = plateImageData.data, d = od.data;
+    for (let i = 0; i < w * h; i++) {
+      if (mask[i]) { const p = i * 4; d[p] = s[p]; d[p+1] = s[p+1]; d[p+2] = s[p+2]; d[p+3] = 255; }
+    }
+    ctx.putImageData(od, 0, 0);
+    return cv;
+  }
+
+  function seekVideo(t) {
+    return new Promise((res) => {
+      const onS = () => { video.removeEventListener('seeked', onS); res(); };
+      video.addEventListener('seeked', onS);
+      try { video.currentTime = Math.min(Math.max(0, t), Math.max(0, video.duration - 0.001)); }
+      catch (_) { video.removeEventListener('seeked', onS); res(); }
+    });
+  }
+
+  // ─── temporal-median clean plate ───
+  async function buildTemporalPlate(w, h, mask) {
+    const idx = [];
+    for (let i = 0; i < w * h; i++) if (mask[i]) idx.push(i);
+    const P = idx.length;
+    if (!P) return new ImageData(w, h);
+    let F = Math.min(48, Math.max(8, Math.round(video.duration * 4)));
+    while (P * F * 3 > 30000000 && F > 8) F--;
+    log.dim(`时序重建:采样 ${F} 帧 · 选区 ${P} 像素`);
+    const tmp = newCanvas(w, h);
+    const tctx = tmp.getContext('2d', { willReadFrequently: true });
+    const R = new Uint8Array(P * F), G = new Uint8Array(P * F), B = new Uint8Array(P * F);
+    for (let f = 0; f < F; f++) {
+      await seekVideo((f + 0.5) / F * video.duration);
+      tctx.drawImage(video, 0, 0, w, h);
+      const data = tctx.getImageData(0, 0, w, h).data;
+      for (let p = 0; p < P; p++) {
+        const gi = idx[p] * 4, b = p * F + f;
+        R[b] = data[gi]; G[b] = data[gi + 1]; B[b] = data[gi + 2];
+      }
+      progress.set(f / F * 0.55);
+    }
+    const plate = new ImageData(w, h);
+    const pd = plate.data;
+    const rr = new Float64Array(F), gg = new Float64Array(F), bb = new Float64Array(F);
+    const mid = F >> 1;
+    for (let p = 0; p < P; p++) {
+      const base = p * F;
+      for (let f = 0; f < F; f++) { rr[f] = R[base + f]; gg[f] = G[base + f]; bb[f] = B[base + f]; }
+      rr.sort((a, b) => a - b); gg.sort((a, b) => a - b); bb.sort((a, b) => a - b);
+      const gi = idx[p] * 4;
+      pd[gi] = rr[mid]; pd[gi + 1] = gg[mid]; pd[gi + 2] = bb[mid]; pd[gi + 3] = 255;
+    }
+    return plate;
+  }
+
+  // ─── AI single-frame clean plate (static background) ───
+  async function buildAiPlate(w, h, mask) {
+    await LaMa.prepare({ onStatus: s => log.dim(s), onProgress: p => progress.set(p * 0.45) });
+    await seekVideo(video.duration / 2);
+    const tmp = newCanvas(w, h);
+    tmp.getContext('2d').drawImage(video, 0, 0, w, h);
+    const img = tmp.getContext('2d').getImageData(0, 0, w, h);
+    log.dim('AI 推理底图(中间帧)...');
+    const res = await LaMa.inpaint(img, mask, {
+      onProgress: p => progress.set(0.45 + p * 0.5),
+      onLog: s => log.dim('  ' + s)
+    });
+    return res;
+  }
+
+  // ─── audio: decode source → PCM (format-agnostic, best-effort) ───
+  async function decodeAudio() {
+    try {
+      const buf = await srcFile.arrayBuffer();
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      const ac = new AC();
+      const audioBuf = await ac.decodeAudioData(buf.slice(0));
+      try { ac.close(); } catch (_) {}
+      if (!audioBuf || audioBuf.length === 0) return null;
+      return audioBuf;
+    } catch (e) {
+      log.warn('音频解码失败,输出将无声:' + (e.message || e));
+      return null;
+    }
+  }
+
+  function feedAudio(audioBuf, encoder) {
+    const numCh = audioBuf.numberOfChannels, sr = audioBuf.sampleRate, total = audioBuf.length;
+    const CH = Math.round(sr * 0.5);
+    for (let off = 0; off < total; off += CH) {
+      const len = Math.min(CH, total - off);
+      const planar = new Float32Array(numCh * len);
+      for (let c = 0; c < numCh; c++) planar.set(audioBuf.getChannelData(c).subarray(off, off + len), c * len);
+      const ad = new AudioData({
+        format: 'f32-planar', sampleRate: sr, numberOfFrames: len,
+        numberOfChannels: numCh, timestamp: Math.round(off / sr * 1e6), data: planar
+      });
+      encoder.encode(ad);
+      ad.close();
+    }
+  }
+
+  async function pickH264(w, h, fps, bitrate) {
+    const candidates = ['avc1.640034', 'avc1.640032', 'avc1.64002A', 'avc1.640028', 'avc1.4D0032', 'avc1.42E032', 'avc1.42E028', 'avc1.42E01E'];
+    for (const c of candidates) {
+      try {
+        const s = await VideoEncoder.isConfigSupported({ codec: c, width: w, height: h, bitrate, framerate: fps });
+        if (s && s.supported) return c;
+      } catch (_) {}
+    }
+    return 'avc1.42E01E';
+  }
+
+  // ─── WebCodecs offline encode (MP4, all engines) ───
+  async function encodeMp4(method, mask) {
+    const w = Math.max(2, video.videoWidth - (video.videoWidth % 2));
+    const h = Math.max(2, video.videoHeight - (video.videoHeight % 2));
+    const fps = Math.min(60, Math.max(1, parseInt($('fps').value, 10) || 30));
+    const bitrate = (parseInt($('bitrate').value, 10) || 4000) * 1000;
+    const solidHex = $('solidColor').value || '#000';
+
+    // 1. precompute clean plate for plate-based engines
+    let overlayCv = null;
+    if (method === 'temporal') {
+      overlayCv = plateOverlay(await buildTemporalPlate(w, h, mask), mask, w, h);
+    } else if (method === 'ai-static') {
+      overlayCv = plateOverlay(await buildAiPlate(w, h, mask), mask, w, h);
+    } else if (method === 'ai-frame') {
+      await LaMa.prepare({ onStatus: s => log.dim(s), onProgress: p => progress.set(p * 0.2) });
+    }
+
+    // 2. audio (best-effort)
+    const audioBuf = await decodeAudio();
+
+    // 3. muxer + encoders
+    const { Muxer, ArrayBufferTarget } = await import('https://esm.sh/mp4-muxer@5.1.5');
+    const muxCfg = {
+      target: new ArrayBufferTarget(),
+      video: { codec: 'avc', width: w, height: h },
+      fastStart: 'in-memory'
+    };
+    if (audioBuf) muxCfg.audio = { codec: 'aac', numberOfChannels: audioBuf.numberOfChannels, sampleRate: audioBuf.sampleRate };
+    const muxer = new Muxer(muxCfg);
+
+    let encErr = null;
+    const vEnc = new VideoEncoder({
+      output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+      error: e => { encErr = e; log.err('video encoder: ' + e.message); }
+    });
+    vEnc.configure({ codec: await pickH264(w, h, fps, bitrate), width: w, height: h, bitrate, framerate: fps });
+
+    let aEnc = null;
+    if (audioBuf) {
+      try {
+        aEnc = new AudioEncoder({
+          output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
+          error: e => { log.warn('audio encoder: ' + e.message); }
+        });
+        aEnc.configure({ codec: 'mp4a.40.2', sampleRate: audioBuf.sampleRate, numberOfChannels: audioBuf.numberOfChannels, bitrate: 128000 });
+        feedAudio(audioBuf, aEnc);
+      } catch (e) {
+        log.warn('音频编码不可用,输出无声:' + (e.message || e));
+        aEnc = null;
+        delete muxCfg.audio;
+      }
+    }
+
+    // 4. render + encode frames
+    const cv = newCanvas(w, h);
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    const numFrames = Math.max(1, Math.round(video.duration * fps));
+    const baseProg = (method === 'temporal' || method === 'ai-static') ? 0.6 : (method === 'ai-frame' ? 0.2 : 0);
+
+    for (let i = 0; i < numFrames; i++) {
+      while (vEnc.encodeQueueSize > 30) await new Promise(r => setTimeout(r, 20));
+      await seekVideo(i / fps);
+      ctx.drawImage(video, 0, 0, w, h);
+
+      if (overlayCv) {
+        ctx.drawImage(overlayCv, 0, 0);
+      } else if (method === 'ai-frame') {
+        const img = ctx.getImageData(0, 0, w, h);
+        const res = await LaMa.inpaint(img, mask, {});
+        ctx.putImageData(res, 0, 0);
+      } else {
+        for (const m of masks) inpaint(ctx, m, w, h, method, solidHex);
+      }
+
+      const vf = new VideoFrame(cv, { timestamp: Math.round(i / fps * 1e6) });
+      vEnc.encode(vf, { keyFrame: i % fps === 0 });
+      vf.close();
+      progress.set(baseProg + (i / numFrames) * (1 - baseProg));
+    }
+
+    await vEnc.flush();
+    vEnc.close();
+    if (aEnc) { try { await aEnc.flush(); aEnc.close(); } catch (_) {} }
+    muxer.finalize();
+    if (encErr) throw new Error('编码失败:' + encErr.message);
+    outExt = 'mp4';
+    return { blob: new Blob([muxer.target.buffer], { type: 'video/mp4' }), frames: numFrames, audio: !!aEnc };
+  }
+
+  // ─── MediaRecorder realtime fallback (WebM, fast spatial methods only) ───
+  async function encodeWebMRealtime(method) {
     const w = video.videoWidth, h = video.videoHeight;
+    const solidHex = $('solidColor').value || '#000';
+    const bitrate = (parseInt($('bitrate').value, 10) || 4000) * 1000;
     const cv = newCanvas(w, h);
     const ctx = cv.getContext('2d', { willReadFrequently: true });
 
-    log.dim('准备处理流(canvas → captureStream + 源音轨 → MediaRecorder)...');
-
-    // Reset video to start
-    try {
-      video.currentTime = 0;
-      await new Promise(res => video.onseeked = () => { video.onseeked = null; res(); });
-    } catch (_) {}
-
-    // Output stream: canvas video + source audio (if present)
-    const videoStream = cv.captureStream(0);  // 0 = manual; we'll requestFrame
+    await seekVideo(0);
+    const videoStream = cv.captureStream(0);
     const videoTrack = videoStream.getVideoTracks()[0];
-    let combinedStream;
-    let audioNote = '';
+    let combined;
     try {
       const srcStream = video.captureStream();
-      const audioTracks = srcStream.getAudioTracks();
-      if (audioTracks.length > 0) {
-        combinedStream = new MediaStream([videoTrack, ...audioTracks]);
-        audioNote = `保留 ${audioTracks.length} 条音轨`;
-      } else {
-        combinedStream = videoStream;
-        audioNote = '源视频无音频';
-      }
-    } catch (e) {
-      combinedStream = videoStream;
-      audioNote = '音频提取失败 (' + e.message + ')';
-    }
-    log.dim(audioNote);
+      const aT = srcStream.getAudioTracks();
+      combined = aT.length ? new MediaStream([videoTrack, ...aT]) : videoStream;
+      log.dim(aT.length ? `保留 ${aT.length} 条音轨` : '源视频无音频');
+    } catch (e) { combined = videoStream; log.warn('音频提取失败:' + e.message); }
 
-    // Pick mime
-    let mimeType = '';
-    if (fmt === 'mp4') {
-      const candidates = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4;codecs=avc1.42E01E', 'video/mp4'];
-      mimeType = candidates.find(m => MediaRecorder.isTypeSupported(m)) || '';
-      if (!mimeType) {
-        log.warn('当前浏览器 MediaRecorder 不支持 MP4,改用 WebM 输出');
-      }
-    }
-    if (!mimeType) {
-      const candidates = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
-      mimeType = candidates.find(m => MediaRecorder.isTypeSupported(m)) || 'video/webm';
-    }
-    outExt = mimeType.includes('mp4') ? 'mp4' : 'webm';
-    log.dim(`输出格式:${mimeType}`);
-
-    let recorder;
-    try {
-      recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: bitrate });
-    } catch (e) {
-      log.err('MediaRecorder 初始化失败:' + e.message);
-      $('processBtn').disabled = false;
-      $('processBtn').textContent = Toolkit.T('vw.process', null, '开始处理');
-      return;
-    }
+    const cands = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+    const mimeType = cands.find(m => MediaRecorder.isTypeSupported(m)) || 'video/webm';
+    const recorder = new MediaRecorder(combined, { mimeType, videoBitsPerSecond: bitrate });
     const chunks = [];
-    recorder.ondataavailable = e => { if (e.data && e.data.size > 0) chunks.push(e.data); };
-
-    const done = new Promise(res => { recorder.onstop = res; });
+    recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+    const done = new Promise(res => recorder.onstop = res);
     recorder.start();
 
-    // Render loop: draw video → inpaint → request canvas frame
-    let stopped = false;
-    let frameCount = 0;
-    const t0 = performance.now();
-
+    let stopped = false, frames = 0;
     function step() {
       if (stopped) return;
       ctx.drawImage(video, 0, 0, w, h);
       for (const m of masks) inpaint(ctx, m, w, h, method, solidHex);
-      // Tell the captureStream to emit a frame
       if (videoTrack.requestFrame) videoTrack.requestFrame();
-      frameCount++;
+      frames++;
       if (video.duration > 0) progress.set(video.currentTime / video.duration);
-      if (video.ended) {
-        stopped = true;
-        // Pause briefly so any in-flight chunks land before stop()
-        setTimeout(() => { try { recorder.stop(); } catch (_) {} }, 250);
-        return;
-      }
+      if (video.ended) { stopped = true; setTimeout(() => { try { recorder.stop(); } catch (_) {} }, 250); return; }
       requestAnimationFrame(step);
     }
-
-    // Unmute so audio is captured (we muted earlier for preview)
     video.muted = false;
-    try { await video.play(); } catch (e) {
-      log.warn('视频播放失败,尝试静音再播:' + e.message);
-      video.muted = true;
-      try { await video.play(); } catch (e2) {
-        log.err('无法播放视频:' + e2.message);
-        try { recorder.stop(); } catch (_) {}
-        $('processBtn').disabled = false;
-        return;
-      }
-    }
+    try { await video.play(); } catch (_) { video.muted = true; await video.play(); }
     step();
-
     await done;
-    const t1 = performance.now();
-    progress.hide();
+    outExt = 'webm';
+    return { blob: new Blob(chunks, { type: mimeType }), frames, audio: true };
+  }
 
-    const blob = new Blob(chunks, { type: mimeType });
-    outBlob = blob;
-
-    if (blob.size < 1024) {
-      log.err(`输出过小(${blob.size} 字节),可能录制失败 — 试试降低码率或换 WebM 格式`);
-      $('processBtn').disabled = false;
-      $('processBtn').textContent = Toolkit.T('vw.process', null, '开始处理');
+  // ─── main ───
+  $('processBtn').addEventListener('click', async () => {
+    if (!srcFile || masks.length === 0) return;
+    // MediaRecorder-produced WebM (and some streams) report a non-finite duration
+    // until the playhead reaches the end. numFrames / seek math would blow up, so
+    // nudge the playhead to force a real duration, then bail if it's still unusable.
+    if (!isFinite(video.duration) || video.duration <= 0) {
+      try {
+        await new Promise(res => { const on = () => { video.removeEventListener('seeked', on); res(); }; video.addEventListener('seeked', on); video.currentTime = 1e7; });
+        await seekVideo(0);
+      } catch (_) {}
+    }
+    if (!isFinite(video.duration) || video.duration <= 0) {
+      log.err('无法读取视频时长(可能是流式 / 损坏的文件)— 试试先用「视频工具箱」转码一遍');
       return;
     }
+    const method = $('method').value;
+    const fmt = $('format').value;
+    const advanced = (method === 'ai-static' || method === 'ai-frame' || method === 'temporal');
 
-    const outUrl = URL.createObjectURL(blob);
-    $('outVideo').src = outUrl;
-    $('outputBox').style.display = '';
-    $('outInfo').textContent = `${frameCount} 帧 · ${fmtBytes(blob.size)} · 耗时 ${((t1 - t0) / 1000).toFixed(2)}s`;
-    handoff?.setBlob(blob, `${name}.${outExt}`, mimeType.split(';')[0]);
-    log.ok(`完成 · ${fmtBytes(blob.size)} · ${audioNote}`);
-    $('processBtn').disabled = false;
-    $('processBtn').textContent = Toolkit.T('vw.process', null, '开始处理');
-    // Make the result hard to miss — page is tall; scroll the output into view
-    // and flash a brief highlight so the user knows where to look.
-    requestAnimationFrame(() => {
-      $('outputBox').scrollIntoView({ behavior: 'smooth', block: 'start' });
-      $('outputBox').animate(
-        [{ boxShadow: '0 0 0 0 rgba(var(--jade-rgb), 0)' }, { boxShadow: '0 0 0 16px rgba(var(--jade-rgb), 0.5)' }, { boxShadow: '0 0 0 0 rgba(var(--jade-rgb), 0)' }],
-        { duration: 1200, easing: 'ease-out' }
-      );
-    });
+    $('processBtn').disabled = true;
+    $('processBtn').textContent = '处理中...';
+    progress.set(0);
+    log.dim(`引擎:${method} · 格式:${fmt}`);
+
+    const t0 = performance.now();
+    try {
+      const w = video.videoWidth, h = video.videoHeight;
+      let result;
+      const canWebCodecs = ('VideoEncoder' in window) && ('VideoFrame' in window);
+
+      if (fmt === 'mp4' || advanced) {
+        if (!canWebCodecs) throw new Error('当前浏览器不支持 WebCodecs — MP4 / AI / 时序需要 Chrome 或 Edge 113+');
+        const mask = (advanced) ? buildUnionMask(w, h) : null;
+        result = await encodeMp4(method, mask);
+      } else {
+        result = await encodeWebMRealtime(method);
+      }
+
+      progress.hide();
+      const { blob, frames, audio } = result;
+      if (!blob || blob.size < 1024) throw new Error(`输出过小(${blob ? blob.size : 0} 字节)— 编码可能失败`);
+      outBlob = blob;
+      const name = ($('filename').value || 'video_clean').replace(/[^\w-]/g, '_');
+      const outUrl = URL.createObjectURL(blob);
+      $('outVideo').src = outUrl;
+      $('outputBox').style.display = '';
+      $('outInfo').textContent = `${frames} 帧 · ${fmtBytes(blob.size)} · ${audio ? '含音频' : '无音频'} · 耗时 ${((performance.now() - t0) / 1000).toFixed(1)}s`;
+      handoff?.setBlob(blob, `${name}.${outExt}`, outExt === 'mp4' ? 'video/mp4' : 'video/webm');
+      log.ok(`完成 · ${fmtBytes(blob.size)} · ${audio ? '含音频' : '无音频'}`);
+      requestAnimationFrame(() => {
+        $('outputBox').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        $('outputBox').animate(
+          [{ boxShadow: '0 0 0 0 rgba(var(--jade-rgb), 0)' }, { boxShadow: '0 0 0 16px rgba(var(--jade-rgb), 0.5)' }, { boxShadow: '0 0 0 0 rgba(var(--jade-rgb), 0)' }],
+          { duration: 1200, easing: 'ease-out' }
+        );
+      });
+    } catch (e) {
+      progress.hide();
+      log.err(e.message || String(e));
+      console.error(e);
+    } finally {
+      $('processBtn').disabled = false;
+      $('processBtn').textContent = '开始处理';
+    }
   });
 
   $('downloadBtn').addEventListener('click', () => {
@@ -756,7 +991,7 @@ Toolkit.injectTopbar('video-watermark');
     $('compareRow').style.display = 'none';
     $('outputBox').style.display = 'none';
     renderMaskList();
-    $('stats').textContent = Toolkit.T('vw.stats.idle', null, 'Dobby 待命 · 拖入视频开始');
+    $('stats').textContent = 'Dobby 待命 · 拖入视频开始';
     $('processBtn').disabled = true;
     log.clear();
     $('fileInput').value = '';

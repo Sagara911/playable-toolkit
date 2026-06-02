@@ -910,6 +910,29 @@ Toolkit.injectTopbar('video-watermark');
     return { blob: new Blob(chunks, { type: mimeType }), frames, audio: true };
   }
 
+  // After processing, draw the RESULT's frame into the right "去水印后" pane —
+  // AI/temporal users naturally watch that pane, but their result otherwise only
+  // appears in the #outputBox lower down. This puts it where they're looking.
+  function showResultInAfterPane(blob) {
+    const after = $('afterCanvas'), afterEmpty = $('afterEmpty');
+    if (!after) return;
+    const v2 = document.createElement('video');
+    v2.muted = true; v2.playsInline = true;
+    v2.src = URL.createObjectURL(blob);
+    v2.addEventListener('loadeddata', () => {
+      const t = isFinite(v2.duration) && v2.duration > 0 ? Math.min(0.15, v2.duration / 2) : 0;
+      try { v2.currentTime = t; } catch (_) {}
+    }, { once: true });
+    v2.addEventListener('seeked', () => {
+      if (afterEmpty) afterEmpty.style.display = 'none';
+      after.style.display = '';
+      ensureAfterCanvasSize();
+      try { after.getContext('2d').drawImage(v2, 0, 0, after.width, after.height); } catch (_) {}
+      URL.revokeObjectURL(v2.src);
+    }, { once: true });
+    v2.addEventListener('error', () => { try { URL.revokeObjectURL(v2.src); } catch (_) {} }, { once: true });
+  }
+
   // ─── main ───
   $('processBtn').addEventListener('click', async () => {
     if (!srcFile || masks.length === 0) return;
@@ -957,6 +980,7 @@ Toolkit.injectTopbar('video-watermark');
       const outUrl = URL.createObjectURL(blob);
       $('outVideo').src = outUrl;
       $('outputBox').style.display = '';
+      showResultInAfterPane(blob);   // mirror the result into the right "after" pane
       $('outInfo').textContent = `${frames} 帧 · ${fmtBytes(blob.size)} · ${audio ? '含音频' : '无音频'} · 耗时 ${((performance.now() - t0) / 1000).toFixed(1)}s`;
       handoff?.setBlob(blob, `${name}.${outExt}`, outExt === 'mp4' ? 'video/mp4' : 'video/webm');
       log.ok(`完成 · ${fmtBytes(blob.size)} · ${audio ? '含音频' : '无音频'}`);

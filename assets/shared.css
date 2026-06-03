@@ -239,8 +239,12 @@ a:hover { color: var(--jade); }
 .ambient-blob {
   position: absolute;
   border-radius: 50%;
-  filter: blur(100px);
-  will-change: transform, opacity;
+  /* Perf: a STATIC blur is rasterized once and cached by the compositor; only
+     animating transform/scale forces a per-frame re-raster of the (huge) blur,
+     which is what made the page janky on integrated GPUs. So we keep the blur
+     modest and the blobs only pulse OPACITY (a compositor-only property — no
+     re-raster). No will-change: the blur already promotes its own layer. */
+  filter: blur(64px);
 }
 .ambient-blob--a {
   width: 45vw; height: 45vw; max-width: 700px; max-height: 700px;
@@ -294,11 +298,11 @@ a:hover { color: var(--jade); }
     rgba(var(--cat-audit-rgb), 0.10),
     rgba(var(--cat-image-rgb), 0.10)
   );
-  filter: blur(80px);
+  filter: blur(56px);
   mix-blend-mode: screen;
   opacity: 0.75;
-  animation: streamRotate 80s linear infinite;
-  will-change: transform;
+  /* Perf: rotating a blur(80px) 200vw layer re-rasterized the whole thing every
+     frame — the single most expensive layer. Now static (rasterized once). */
 }
 @keyframes streamRotate {
   from { transform: rotate(0deg); }
@@ -307,29 +311,15 @@ a:hover { color: var(--jade); }
 :root[data-theme="light"] .ambient-stream {
   mix-blend-mode: multiply;
   opacity: 0.35;
-  filter: blur(100px);
+  filter: blur(64px);
 }
-@keyframes ambientA {
-  0%,100% { transform: translate(0, 0) scale(1);       opacity: 0.5; }
-  25%     { transform: translate(8vw, 12vh) scale(1.1); opacity: 0.8; }
-  50%     { transform: translate(3vw, 25vh) scale(0.95);opacity: 0.6; }
-  75%     { transform: translate(-5vw, 10vh) scale(1.15);opacity: 0.9; }
-}
-@keyframes ambientB {
-  0%,100% { transform: translate(0, 0) scale(1);        opacity: 0.4; }
-  30%     { transform: translate(-10vw, -8vh) scale(1.15); opacity: 0.75; }
-  60%     { transform: translate(-5vw, 10vh) scale(0.9);   opacity: 0.55; }
-}
-@keyframes ambientC {
-  0%,100% { transform: translate(0, 0) scale(1);        opacity: 0.35; }
-  35%     { transform: translate(6vw, -15vh) scale(1.2); opacity: 0.7; }
-  70%     { transform: translate(-4vw, -5vh) scale(0.95);opacity: 0.5; }
-}
-@keyframes ambientD {
-  0%,100% { transform: translate(0, 0) scale(1);        opacity: 0.3; }
-  40%     { transform: translate(10vw, 8vh) scale(1.1); opacity: 0.6; }
-  80%     { transform: translate(-8vw, -10vh) scale(0.95); opacity: 0.45; }
-}
+/* Opacity-only "breathing" — compositor-only, no blur re-raster (cheap).
+   The old keyframes also drifted transform/scale, which re-rasterized the
+   blur every frame and caused the jank. */
+@keyframes ambientA { 0%,100% { opacity: 0.50; } 50% { opacity: 0.85; } }
+@keyframes ambientB { 0%,100% { opacity: 0.42; } 50% { opacity: 0.72; } }
+@keyframes ambientC { 0%,100% { opacity: 0.36; } 50% { opacity: 0.62; } }
+@keyframes ambientD { 0%,100% { opacity: 0.30; } 50% { opacity: 0.55; } }
 
 /* ── Performance / accessibility: respect prefers-reduced-motion ──
    Users on low-end laptops, mobiles, or with the OS-level "reduce
@@ -393,8 +383,8 @@ a:hover { color: var(--jade); }
   border-radius: var(--radius-pill);
   background: rgba(200, 210, 205, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
     inset 0 -1px 0 rgba(0, 0, 0, 0.08),
@@ -1009,8 +999,8 @@ a:hover { color: var(--jade); }
 }
 .sidebar {
   background: rgba(20, 20, 26, 0.6);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 18px;
@@ -1049,8 +1039,8 @@ h1 {
   padding: 12px 20px;
   background: rgba(200, 210, 205, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border-radius: var(--radius-pill);
   text-decoration: none;
   font-family: "Space Grotesk", "Inter", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;

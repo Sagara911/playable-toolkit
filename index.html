@@ -87,10 +87,10 @@
     content: "";
     position: absolute;
     border-radius: 50%;
-    filter: blur(90px);
+    filter: blur(64px);
     pointer-events: none;
     z-index: 0;
-    will-change: transform;
+    /* opacity-only animation below → compositor-cheap, no per-frame blur re-raster */
   }
   .hero-orbs::before {
     width: clamp(360px, 50vw, 560px);
@@ -116,14 +116,12 @@
     animation-delay: -8s; /* offset phase so the two never sync */
   }
   @keyframes hero-orb-1 {
-    0%, 100% { transform: translate(0, 0) scale(1); }
-    33%      { transform: translate(40px, 60px) scale(1.08); }
-    66%      { transform: translate(-30px, 30px) scale(0.96); }
+    0%, 100% { opacity: 0.70; }
+    50%      { opacity: 0.95; }
   }
   @keyframes hero-orb-2 {
-    0%, 100% { transform: translate(0, 0) scale(1); }
-    40%      { transform: translate(-60px, -40px) scale(1.12); }
-    75%      { transform: translate(20px, -20px) scale(0.94); }
+    0%, 100% { opacity: 0.58; }
+    50%      { opacity: 0.82; }
   }
   /* Hero content (h1, sub, mascot, scroll-hint) lives above the orbs.
      :not(.hero-orbs) so the absolutely-positioned orb layer keeps its own

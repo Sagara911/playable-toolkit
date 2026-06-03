@@ -282,7 +282,7 @@
     { id: 'bundle-analyzer',cat: 'audit', name: '包体分析',       en: 'Bundle Analyzer', icon: '📊', href: 'tools/bundle-analyzer.html', desc: '扫描项目目录,显示类别分布 + 大文件清单' },
     { id: 'channel-check',  cat: 'audit', name: '渠道检查',       en: 'Channel Check',   icon: '✅', href: 'tools/channel-check.html', desc: 'Facebook / Google / TikTok 等渠道规范校验' },
     { id: 'slim-coach',     cat: 'audit', name: '瘦身助手',       en: 'Slim Coach',      icon: '🩺', href: 'tools/slim-coach.html', desc: '扫描项目,给出针对每类资源的具体瘦身建议' },
-    { id: 'playable-slim',  cat: 'audit', name: 'Playable 瘦身',   en: 'Playable Slim',   icon: '🩻', href: 'tools/playable-slim.html', desc: '拆大体积 HTML 内联素材 → 单独压(图片 AVIF/WebP/mozjpeg + 最大边长降采样 · 视频 WebCodecs)→ 重组,Playable 减肥神器' }
+    { id: 'playable-slim',  cat: 'audit', name: 'Playable 瘦身',   en: 'Playable Slim',   icon: '🩻', href: 'tools/playable-slim.html', desc: '拆大体积 HTML 内联素材 → 单独压(图片 AVIF/WebP 取最小 + 降采样 · 视频 WebCodecs · 字体子集化)→ 重组,Playable 减肥神器' }
   ];
 
   // Per-tool inline usage guide (auto-injected to sidebar).

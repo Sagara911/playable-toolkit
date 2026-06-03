@@ -99,6 +99,7 @@
         <option value="1">1×(只增清晰,不放大)</option>
       </select>
     </div>
+    <div class="method-help" id="outPredict"></div>
     <div id="videoOpts">
       <div class="field"><label>帧率 (fps)</label><input type="number" id="fps" value="30" min="1" max="60" /></div>
       <div class="field"><label>码率 (kbps)</label><input type="number" id="bitrate" value="8000" min="1000" max="80000" /></div>
@@ -166,9 +167,23 @@ Toolkit.injectTopbar('video-upscale');
 
   attachDropZone($('dropZone'), $('fileInput'), files => handleFiles(files));
 
-  function onModelChange() { $('modelHelp').textContent = MODEL_HELP[$('model').value] || ''; }
+  function onModelChange() { $('modelHelp').textContent = MODEL_HELP[$('model').value] || ''; refreshPredict(); }
   $('model').addEventListener('change', onModelChange);
+  $('outScale').addEventListener('change', () => refreshPredict());
   onModelChange();
+
+  // Live "predicted output" hint so the size risk is visible BEFORE clicking.
+  function refreshPredict() {
+    const el = $('outPredict'); if (!el) return;
+    if (!srcFile) { el.textContent = ''; return; }
+    const { w, h } = predictedOutput($('model').value);
+    const area = w * h; let tag = '', warn = false;
+    if (w > 8192 || h > 8192 || area > 36e6) { tag = ' · ⚠️ 超 8K,会被拦截(请调小倍数)'; warn = true; }
+    else if (kind === 'video' && area > 12e6) { tag = ' · ⚠️ 偏大,弱机可能崩'; warn = true; }
+    else if (area > 20e6) { tag = ' · ⚠️ 较大'; warn = true; }
+    el.textContent = `预计输出 ${w}×${h}${tag}`;
+    el.style.color = warn ? '#f5a54b' : 'var(--muted)';
+  }
 
   async function handleFiles(files) {
     if (!files.length) return;
@@ -202,6 +217,7 @@ Toolkit.injectTopbar('video-upscale');
       $('stats').innerHTML = `<strong>${img.naturalWidth}×${img.naturalHeight}</strong> · ${fmtBytes(f.size)}`;
     }
     $('processBtn').disabled = false;
+    refreshPredict();
   }
 
   function detectFps() {
@@ -343,9 +359,41 @@ Toolkit.injectTopbar('video-upscale');
     return { blob: new Blob([muxer.target.buffer], { type: 'video/mp4' }), w: outW, h: outH, frames: numFrames, audio: !!aEnc, ext: 'mp4', mime: 'video/mp4' };
   }
 
+  // Predicted output dims for the current model + 输出倍数 (no inference needed).
+  function predictedOutput(modelKey) {
+    const inW = kind === 'video' ? video.videoWidth : img.naturalWidth;
+    const inH = kind === 'video' ? video.videoHeight : img.naturalHeight;
+    const modelScale = (window.SR.MODELS[modelKey] || {}).scale || 4;
+    const sel = $('outScale').value;
+    const eff = sel === 'native' ? modelScale : (parseFloat(sel) || 1);
+    return { w: Math.round(inW * eff), h: Math.round(inH * eff) };
+  }
+
   $('processBtn').addEventListener('click', async () => {
     if (!srcFile) return;
     const modelKey = $('model').value;
+
+    // ── Output-size guard ──────────────────────────────────────────────
+    // Huge outputs OOM-crash the tab: the per-frame canvas + VideoFrame at
+    // 8K is ~130MB each, the encoder buffers add more, and mp4-muxer holds
+    // the ENTIRE output MP4 in RAM until done. Block past ~8K; warn before.
+    const { w: pw, h: ph } = predictedOutput(modelKey);
+    const area = pw * ph;
+    if (pw > 8192 || ph > 8192 || area > 36e6) {
+      log.err(`输出会是 ${pw}×${ph}(超 8K)— 浏览器多半会崩。请把「输出倍数」调小(2× / 1.5×),或改用 Real-CUGAN(2×),或先缩小输入分辨率再放大。`);
+      return;
+    }
+    if (kind === 'video' && area > 12e6) {
+      log.warn(`输出 ${pw}×${ph} 偏大,视频逐帧 + 8K 级编码很吃显存/内存,弱机可能崩。建议降到 2× 或用 Real-CUGAN。`);
+    } else if (area > 20e6) {
+      log.warn(`输出 ${pw}×${ph} 较大,可能慢且吃内存。`);
+    }
+    if (kind === 'video') {
+      const fpsv = Math.min(60, Math.max(1, parseInt($('fps').value, 10) || 30));
+      const frames = Math.round((video.duration || 0) * fpsv);
+      if (frames > 600) log.warn(`约 ${frames} 帧 — 逐帧超分耗时长,且整段输出在内存里累积。长视频建议先裁短/降帧率,或分段处理。`);
+    }
+
     $('processBtn').disabled = true; $('processBtn').textContent = '处理中...';
     progress.set(0); resetAfterPane();
     log.dim(`模型:${modelKey} · 类型:${kind}`);

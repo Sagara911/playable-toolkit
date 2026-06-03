@@ -150,9 +150,10 @@
         <select id="autoImageEngine">
           <option value="native" selected data-i18n="ps.engine.native">浏览器原生 (快, 零下载)</option>
           <option value="hq" data-i18n="ps.engine.hq">mozjpeg + oxipng (体积 -10%~-25%, 首次联网 ~1 MB)</option>
-          <option value="avif">AVIF (体积最小 · 比 WebP 再小 ~40-50% · 需较新浏览器/webview · 首次联网)</option>
+          <option value="best">🏆 智能最小 (每张图 WebP + AVIF 各编一次取最小 · 推荐)</option>
+          <option value="avif">AVIF (统一转 AVIF · 比 WebP 再小 ~40-50% · 需较新 webview)</option>
         </select>
-        <div class="info" style="margin-top:4px" data-i18n="ps.engine.note">"hq" 用 WASM 极致编码器,质量等价但体积更小;视频/音频不受此影响</div>
+        <div class="info" style="margin-top:4px">想「保证质量又最小」:引擎选 <strong>🏆 智能最小</strong> + 质量档选 <strong>🛡️ 保守</strong> + 设个最大边长。AVIF/智能最小解码需较新浏览器/webview;"hq" 用 WASM 极致编码器但只保留原格式。</div>
       </div>
 
       <h2>图片最大边长</h2>
@@ -966,6 +967,27 @@ Toolkit.injectTopbar('playable-slim');
         console.warn('[avif] failed, falling back:', e);
         outBlob = null;
       }
+    }
+
+    // "best": encode BOTH WebP and AVIF at the preset quality and keep whichever
+    // is smaller. Different images favor different codecs (flat/alpha → WebP can
+    // win; photographic → AVIF usually wins), so this guarantees the smallest
+    // result at a quality-preserving setting. The 2% caller threshold keeps the
+    // original if neither beats it.
+    if (engine === 'best' && window.Codecs &&
+        (mime === 'image/png' || mime === 'image/jpeg' || mime === 'image/jpg' || mime === 'image/webp')) {
+      try {
+        const imageData = cctx.getImageData(0, 0, c.width, c.height);
+        const webpQ = (mime === 'image/png') ? (p.pngWebpQ || p.webp) : p.webp;
+        const cands = [];
+        try { cands.push({ m: 'image/webp', b: await Codecs.encodeWebp(imageData, { quality: webpQ }) }); } catch (_) {}
+        try { cands.push({ m: 'image/avif', b: await Codecs.encodeAvif(imageData, { quality: p.avif, speed: 6 }) }); } catch (_) {}
+        if (cands.length) {
+          cands.sort((a, b) => a.b.byteLength - b.b.byteLength);
+          outBlob = new Blob([cands[0].b], { type: cands[0].m });
+          outMime = cands[0].m;
+        }
+      } catch (e) { console.warn('[best] failed, falling back:', e); outBlob = null; }
     }
 
     // High-quality engine routing (mozjpeg / oxipng). Only used when the

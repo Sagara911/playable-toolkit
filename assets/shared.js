@@ -264,7 +264,7 @@
     { id: 'video-upscale',  cat: 'ai',    name: 'AI 超分辨率',    en: 'AI Upscale',      icon: '🔬', href: 'tools/video-upscale.html',  desc: '视频/图片神经网络超分放大(Real-ESRGAN / Real-CUGAN,TF.js + WebGPU),多模型可选,逐帧重编码保留音频,纯本地' },
     // 代码 / 打包
     { id: 'html-inliner',   cat: 'code',  name: '单文件打包',     en: 'HTML Inliner',    icon: '📄', href: 'tools/html-inliner.html',   desc: '把外部 JS/CSS/图片内联为单 HTML' },
-    { id: 'code-minify',    cat: 'code',  name: '代码压缩',       en: 'Code Minify',     icon: '🗜️', href: 'tools/code-minify.html',    desc: 'JS / CSS / HTML 压缩,JS 用 terser' },
+    { id: 'code-minify',    cat: 'code',  name: '代码压缩',       en: 'Code Minify',     icon: '🗜️', href: 'tools/code-minify.html',    desc: 'JS=terser / CSS=csso / HTML=html-minifier-terser,显示 gzip 真实体积 + HTML「代码 vs 内嵌资源」体积拆解' },
     { id: 'base64',         cat: 'code',  name: 'Base64',         en: 'Base64',          icon: '🔤', href: 'tools/base64.html',         desc: '文件 ↔ base64/dataURL 互转' },
     { id: 'json-tools',     cat: 'code',  name: 'JSON 工具',      en: 'JSON Tools',      icon: '📋', href: 'tools/json-tools.html',     desc: '格式化 / 压缩 / 校验 / 排序 keys / 树形浏览,错误带行列定位' },
     { id: 'jwt-decoder',    cat: 'code',  name: 'JWT 解码器',     en: 'JWT Decoder',     icon: '🔑', href: 'tools/jwt-decoder.html',    desc: '粘贴 JWT token 拆解 header/payload/signature + 常用 claims 解读 + 过期判断' },

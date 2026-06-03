@@ -120,6 +120,7 @@
     </div>
 
     <div id="cssOpts">
+      <div class="compat-note">CSS 用 <strong>csso</strong>(自动合并规则 / 简写 / 缩短颜色),首次联网</div>
       <h2 data-i18n="cm.cssOpts">CSS 选项</h2>
       <label class="checkbox"><input type="checkbox" id="cssRemoveComments" checked /><span data-i18n="cm.css.rmComments">删除注释</span></label>
       <label class="checkbox"><input type="checkbox" id="cssCollapseSpace" checked /><span data-i18n="cm.css.collapse">压缩空白</span></label>
@@ -132,6 +133,7 @@
       <label class="checkbox"><input type="checkbox" id="jsCompress" checked /><span data-i18n="cm.js.compress">逻辑压缩 (dead code 等)</span></label>
     </div>
     <div id="htmlOpts" style="display:none">
+      <div class="compat-note">HTML 用 <strong>html-minifier-terser</strong>,内联 &lt;script&gt;/&lt;style&gt; 自动走 terser / clean-css。压缩后会显示「代码 vs 内嵌资源」体积拆解</div>
       <h2 data-i18n="cm.htmlOpts">HTML 选项</h2>
       <label class="checkbox"><input type="checkbox" id="htmlRemoveComments" checked /><span data-i18n="cm.html.rmComments">删除注释</span></label>
       <label class="checkbox"><input type="checkbox" id="htmlCollapseSpace" checked /><span data-i18n="cm.html.collapse">折叠空白</span></label>
@@ -197,6 +199,35 @@ Toolkit.injectTopbar('code-minify');
     });
   }
 
+  // Real transfer size: text minify floors out ~30-40%, but gzip/brotli on top
+  // is the big win (75-85%). Show it so "minified file still big" makes sense.
+  async function gzipSize(str) {
+    try {
+      if (typeof CompressionStream === 'undefined') return null;
+      const data = new TextEncoder().encode(str);
+      const buf = await new Response(new Blob([data]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer();
+      return buf.byteLength;
+    } catch (_) { return null; }
+  }
+
+  // Where do the bytes go? Embedded base64 (data: URIs) can't be text-minified;
+  // this tells the user whether to attack code or assets.
+  function analyzeHtml(str) {
+    let assetBytes = 0, img = 0, font = 0, av = 0, other = 0;
+    const re = /data:([^;,]*);base64,([A-Za-z0-9+/=]+)/gi;
+    let m;
+    while ((m = re.exec(str))) {
+      const mime = (m[1] || '').toLowerCase();
+      const bytes = m[0].length;            // base64 text is what bloats the file
+      assetBytes += bytes;
+      if (/^image\//.test(mime)) img += bytes;
+      else if (/font|woff|ttf|otf/.test(mime)) font += bytes;
+      else if (/^(video|audio)\//.test(mime)) av += bytes;
+      else other += bytes;
+    }
+    return { total: new Blob([str]).size, assetBytes, img, font, av, other };
+  }
+
   document.querySelectorAll('#langTabs button').forEach(b => {
     b.addEventListener('click', () => {
       lang = b.dataset.lang;
@@ -259,8 +290,34 @@ Toolkit.injectTopbar('code-minify');
       const inSize = new Blob([src]).size;
       const outSize = new Blob([out]).size;
       $('outputSize').textContent = fmtBytes(outSize);
-      const pct = ((inSize - outSize) / inSize * 100);
-      $('stats').innerHTML = `<strong>${fmtBytes(inSize)} → ${fmtBytes(outSize)}</strong> · ${Toolkit.T('cm.ratio', null, '压缩率')} <strong>${pct.toFixed(1)}%</strong>`;
+      const pct = inSize ? ((inSize - outSize) / inSize * 100) : 0;
+      const gz = await gzipSize(out);
+      let statsHtml = `<strong>${fmtBytes(inSize)} → ${fmtBytes(outSize)}</strong> · ${Toolkit.T('cm.ratio', null, '压缩率')} <strong>${pct.toFixed(1)}%</strong>`;
+      // Only surface gzip when it actually helps — on tiny inputs gzip's header
+      // overhead makes it larger, which would read as "gzip is worse".
+      if (gz != null && gz < outSize) {
+        const gpct = ((outSize - gz) / outSize * 100);
+        statsHtml += ` · gzip 后 <strong>${fmtBytes(gz)}</strong>(再省 ${gpct.toFixed(0)}%)`;
+        log.dim(`gzip 后约 ${fmtBytes(gz)} — 这才是部署/传输的真实体积(服务器一般自动 gzip/brotli,brotli 还能再小 ~15%)`);
+      }
+      $('stats').innerHTML = statsHtml;
+      // HTML composition: show where the bytes actually go (code vs embedded base64)
+      if (lang === 'html') {
+        const b = analyzeHtml(out);
+        if (b.assetBytes > 0) {
+          const aPct = b.total ? (b.assetBytes / b.total * 100) : 0;
+          log.line(`体积拆解:内嵌 base64 资源 ${fmtBytes(b.assetBytes)}(${aPct.toFixed(0)}%) · 代码/标记 ${fmtBytes(Math.max(0, b.total - b.assetBytes))}`);
+          const parts = [];
+          if (b.img) parts.push(`图片 ${fmtBytes(b.img)}`);
+          if (b.font) parts.push(`字体 ${fmtBytes(b.font)}`);
+          if (b.av) parts.push(`音视频 ${fmtBytes(b.av)}`);
+          if (b.other) parts.push(`其他 ${fmtBytes(b.other)}`);
+          if (parts.length) log.dim('  其中 ' + parts.join(' · '));
+          if (aPct >= 45) log.warn(`大头是内嵌资源 — 文本压缩对它无效。请压资源本身:图片压缩 / PNG 深压 / 字体子集化 / Playable 瘦身`);
+        } else {
+          log.dim('未发现内嵌 base64 资源 — 体积主要是代码,gzip/brotli 已是主要优化手段');
+        }
+      }
       const outMime = lang === 'css' ? 'text/css'
                     : lang === 'html' ? 'text/html'
                     : 'application/javascript';

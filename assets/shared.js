@@ -140,9 +140,11 @@
   // ============================================================
   const CAT_LUCIDE = {
     image: 'image',
-    anim:  'film',
+    ai:    'sparkles',
+    anim:  'gamepad-2',
     av:    'volume-2',
     code:  'code-xml',
+    files: 'folder-archive',
     audit: 'bar-chart-3'
   };
   const TOOL_LUCIDE = {
@@ -232,17 +234,17 @@
     { id: 'png-crusher',    cat: 'image', name: 'PNG 深压',       en: 'PNG Crusher',     icon: '💎', href: 'tools/png-crusher.html',    desc: '深度 PNG 压缩 (palette 编码, -60~85%)' },
     { id: 'image-editor',   cat: 'image', name: '图片编辑',       en: 'Image Editor',    icon: '🖼️', href: 'tools/image-editor.html',   desc: '单图编辑:裁剪 / 旋转 / 加文字 / 像素化 / 滤镜' },
     { id: 'color-tools',    cat: 'image', name: '调色工具',       en: 'Color Tools',     icon: '🎨', href: 'tools/color-tools.html',    desc: '抠图 / 取色 / 主色提取 / 减色' },
-    { id: 'ai-cutout',      cat: 'image', name: 'AI 抠图',        en: 'AI Cutout',       icon: '🤖', href: 'tools/ai-cutout.html',      desc: 'AI 抠图 (MODNet / RMBG),复杂背景' },
-    { id: 'watermark-remove',cat:'image', name: '去水印',         en: 'Watermark Remove',icon: '🩹', href: 'tools/watermark-remove.html', desc: '画刷 / 矩形选水印区,扩散插值或 AI 模型填充' },
+    { id: 'ai-cutout',      cat: 'ai',    name: 'AI 抠图',        en: 'AI Cutout',       icon: '🤖', href: 'tools/ai-cutout.html',      desc: 'AI 抠图 (MODNet / RMBG),复杂背景' },
+    { id: 'watermark-remove',cat:'ai',    name: '去水印',         en: 'Watermark Remove',icon: '🩹', href: 'tools/watermark-remove.html', desc: '画刷 / 矩形选水印区,扩散插值或 AI 模型填充' },
     { id: 'composer',       cat: 'image', name: '拼图合成',       en: 'Composer',        icon: '🧩', href: 'tools/composer.html',       desc: '多图拼接 / 叠加 / 加水印' },
     { id: 'image-diff',     cat: 'image', name: '图像对比',       en: 'Image Diff',      icon: '🔬', href: 'tools/image-diff.html',     desc: 'A/B 对比 + 滑动 + 热图 + PSNR/SSIM,压缩前后必备' },
     { id: 'svg-tools',      cat: 'image', name: 'SVG 工具',       en: 'SVG Tools',       icon: '📐', href: 'tools/svg-tools.html',      desc: 'SVGO 优化 + 转 PNG (1x/2x/3x/4x),批量处理,实时预览' },
     { id: 'a11y-contrast',  cat: 'image', name: '颜色对比度',     en: 'A11y Contrast',   icon: '♿', href: 'tools/a11y-contrast.html',  desc: 'WCAG 对比度检查 + AA/AAA 合规 + 三种色盲滤镜预览' },
     { id: 'favicon-maker',  cat: 'image', name: 'Favicon 套装',   en: 'Favicon Maker',   icon: '🌐', href: 'tools/favicon-maker.html',  desc: '一张图 → 10 个尺寸 favicon + manifest.json + HTML link 代码,一键 ZIP 打包' },
     { id: 'exif-tool',      cat: 'image', name: 'EXIF 工具',      en: 'EXIF Tool',       icon: '📷', href: 'tools/exif-tool.html',      desc: '查看 + 清除 JPEG 元数据(GPS / 相机 / 时间...),保护拍摄隐私' },
-    { id: 'normal-map',     cat: 'image', name: '法线贴图',       en: 'Normal Map',      icon: '🗿', href: 'tools/normal-map.html',     desc: 'Sobel 算子从灰度图生成法线贴图,可调强度 / 模糊 / 翻转,带光照预览' },
-    { id: 'texture-gen',    cat: 'image', name: '程序化纹理',     en: 'Texture Gen',     icon: '🌀', href: 'tools/texture-gen.html',    desc: 'Perlin/fBm/Voronoi/砖墙/条纹 9 种程序化纹理,种子可控,6 种色谱图' },
-    { id: 'ocr-tool',       cat: 'image', name: 'OCR 图转文字',   en: 'OCR',             icon: '👁️', href: 'tools/ocr-tool.html',       desc: '图片识别文字,Tesseract.js,英 / 简中 / 繁中 / 日 / 韩,全本地推理' },
+    { id: 'normal-map',     cat: 'anim',  name: '法线贴图',       en: 'Normal Map',      icon: '🗿', href: 'tools/normal-map.html',     desc: 'Sobel 算子从灰度图生成法线贴图,可调强度 / 模糊 / 翻转,带光照预览' },
+    { id: 'texture-gen',    cat: 'anim',  name: '程序化纹理',     en: 'Texture Gen',     icon: '🌀', href: 'tools/texture-gen.html',    desc: 'Perlin/fBm/Voronoi/砖墙/条纹 9 种程序化纹理,种子可控,6 种色谱图' },
+    { id: 'ocr-tool',       cat: 'ai',    name: 'OCR 图转文字',   en: 'OCR',             icon: '👁️', href: 'tools/ocr-tool.html',       desc: '图片识别文字,Tesseract.js,英 / 简中 / 繁中 / 日 / 韩,全本地推理' },
     // 动画 / 精灵图
     { id: 'pixel-editor',   cat: 'anim',  name: '像素画板',       en: 'Pixel Editor',    icon: '🎨', href: 'tools/pixel-editor.html',   desc: '从零画像素图 — 铅笔/填充/对称镜像 + PICO-8/GameBoy 调色板' },
     { id: 'tilemap',        cat: 'anim',  name: 'Tilemap 编辑器', en: 'Tilemap Editor',  icon: '🗺️', href: 'tools/tilemap.html',        desc: '用 tileset 拼地图,导出 Tiled 兼容 JSON + 平摊 PNG' },
@@ -258,8 +260,8 @@
     { id: 'audio-compress', cat: 'av',    name: '音频压缩',       en: 'Audio Compressor',icon: '🔊', href: 'tools/audio-compress.html', desc: '降采样 / 单声道 / 裁剪 / fade / WAV/Opus 输出' },
     { id: 'sfx-maker',      cat: 'av',    name: '8-bit 音效',     en: 'SFX Maker',       icon: '🎮', href: 'tools/sfx-maker.html',      desc: '8-bit 游戏音效生成器,7 个经典预设 + 可调波形 / 包络 / 滤波,导出 WAV/Opus' },
     { id: 'screen-recorder',cat: 'av',    name: '屏幕录制',       en: 'Screen Recorder', icon: '📺', href: 'tools/screen-recorder.html', desc: '浏览器原生 getDisplayMedia 录屏 + 麦克风 + 摄像头叠加,直接出 WebM,零上传' },
-    { id: 'video-watermark',cat: 'av',    name: '视频去水印',     en: 'Video Watermark', icon: '🎭', href: 'tools/video-watermark.html',desc: '圈出水印,AI LaMa 神经网络补全 / 时序中值还原 / 快速涂抹,WebCodecs 帧精确重编码并保留音频' },
-    { id: 'video-upscale',  cat: 'av',    name: 'AI 超分辨率',    en: 'AI Upscale',      icon: '🔬', href: 'tools/video-upscale.html',  desc: '视频/图片神经网络超分放大(Real-ESRGAN / Real-CUGAN,TF.js + WebGPU),多模型可选,逐帧重编码保留音频,纯本地' },
+    { id: 'video-watermark',cat: 'ai',    name: '视频去水印',     en: 'Video Watermark', icon: '🎭', href: 'tools/video-watermark.html',desc: '圈出水印,AI LaMa 神经网络补全 / 时序中值还原 / 快速涂抹,WebCodecs 帧精确重编码并保留音频' },
+    { id: 'video-upscale',  cat: 'ai',    name: 'AI 超分辨率',    en: 'AI Upscale',      icon: '🔬', href: 'tools/video-upscale.html',  desc: '视频/图片神经网络超分放大(Real-ESRGAN / Real-CUGAN,TF.js + WebGPU),多模型可选,逐帧重编码保留音频,纯本地' },
     // 代码 / 打包
     { id: 'html-inliner',   cat: 'code',  name: '单文件打包',     en: 'HTML Inliner',    icon: '📄', href: 'tools/html-inliner.html',   desc: '把外部 JS/CSS/图片内联为单 HTML' },
     { id: 'code-minify',    cat: 'code',  name: '代码压缩',       en: 'Code Minify',     icon: '🗜️', href: 'tools/code-minify.html',    desc: 'JS / CSS / HTML 压缩,JS 用 terser' },
@@ -269,13 +271,13 @@
     { id: 'hash-calc',      cat: 'code',  name: '文件哈希',       en: 'Hash Calculator', icon: '🔐', href: 'tools/hash-calc.html',      desc: 'MD5 / SHA-1 / SHA-256 / SHA-384 / SHA-512,文件 + 文本,带摘要校验' },
     { id: 'regex-tester',   cat: 'code',  name: '正则测试器',     en: 'Regex Tester',    icon: '🔍', href: 'tools/regex-tester.html',   desc: '实时高亮 + 命名捕获组解析 + 22 个常用正则预设 + flag 速查' },
     { id: 'markdown-editor',cat: 'code',  name: 'Markdown',       en: 'Markdown Editor', icon: '📝', href: 'tools/markdown-editor.html',desc: '实时双栏预览 + 工具栏 + 导出 .md 和带样式 .html,支持 GFM 表格/待办/代码块' },
-    { id: 'zip-packer',     cat: 'code',  name: 'ZIP 打包',       en: 'ZIP Packer',      icon: '📦', href: 'tools/zip-packer.html',     desc: '多文件 / 文件夹 → ZIP,deflate level 0-9 可调' },
-    { id: 'file-compress',  cat: 'code',  name: '文件压缩',       en: 'File Compressor', icon: '🗜️', href: 'tools/file-compress.html',  desc: 'Word / PPT / Excel / ZIP 重新打包,可压缩 Office 内嵌图片' },
-    { id: 'qr-gen',         cat: 'code',  name: 'QR 码',          en: 'QR Generator',    icon: '📱', href: 'tools/qr-gen.html',         desc: 'URL / WiFi / 名片 / 短信 → QR 码,可嵌 logo' },
-    { id: 'font-subset',    cat: 'code',  name: '字体子集化',     en: 'Font Subsetter',  icon: '🔠', href: 'tools/font-subset.html',    desc: '中文字体 50MB → 几 KB,playable 包体救星' },
-    { id: 'batch-rename',   cat: 'code',  name: '批量重命名',     en: 'Batch Rename',    icon: '🏷️', href: 'tools/batch-rename.html',   desc: '模板 + 查找替换 + 序号补零,实时预览冲突高亮,导出 ZIP' },
-    { id: 'pdf-tools',      cat: 'code',  name: 'PDF 工具包',     en: 'PDF Tools',       icon: '📄', href: 'tools/pdf-tools.html',      desc: 'PDF 合并 / 拆分 / 提图 / 重压缩,pdf-lib + pdf.js,全本地' },
-    { id: 'transcode',      cat: 'code',  name: '万能转码',       en: 'Transcode',       icon: '🔁', href: 'tools/transcode.html',      desc: '图片 / 视频 / 音频一站转格式,拖进去自动认类型,一键转完' },
+    { id: 'zip-packer',     cat: 'files', name: 'ZIP 打包',       en: 'ZIP Packer',      icon: '📦', href: 'tools/zip-packer.html',     desc: '多文件 / 文件夹 → ZIP,deflate level 0-9 可调' },
+    { id: 'file-compress',  cat: 'files', name: '文件压缩',       en: 'File Compressor', icon: '🗜️', href: 'tools/file-compress.html',  desc: 'Word / PPT / Excel / ZIP 重新打包,可压缩 Office 内嵌图片' },
+    { id: 'qr-gen',         cat: 'files', name: 'QR 码',          en: 'QR Generator',    icon: '📱', href: 'tools/qr-gen.html',         desc: 'URL / WiFi / 名片 / 短信 → QR 码,可嵌 logo' },
+    { id: 'font-subset',    cat: 'files', name: '字体子集化',     en: 'Font Subsetter',  icon: '🔠', href: 'tools/font-subset.html',    desc: '中文字体 50MB → 几 KB,playable 包体救星' },
+    { id: 'batch-rename',   cat: 'files', name: '批量重命名',     en: 'Batch Rename',    icon: '🏷️', href: 'tools/batch-rename.html',   desc: '模板 + 查找替换 + 序号补零,实时预览冲突高亮,导出 ZIP' },
+    { id: 'pdf-tools',      cat: 'files', name: 'PDF 工具包',     en: 'PDF Tools',       icon: '📄', href: 'tools/pdf-tools.html',      desc: 'PDF 合并 / 拆分 / 提图 / 重压缩,pdf-lib + pdf.js,全本地' },
+    { id: 'transcode',      cat: 'files', name: '万能转码',       en: 'Transcode',       icon: '🔁', href: 'tools/transcode.html',      desc: '图片 / 视频 / 音频一站转格式,拖进去自动认类型,一键转完' },
     // 分析 / 诊断
     { id: 'bundle-analyzer',cat: 'audit', name: '包体分析',       en: 'Bundle Analyzer', icon: '📊', href: 'tools/bundle-analyzer.html', desc: '扫描项目目录,显示类别分布 + 大文件清单' },
     { id: 'channel-check',  cat: 'audit', name: '渠道检查',       en: 'Channel Check',   icon: '✅', href: 'tools/channel-check.html', desc: 'Facebook / Google / TikTok 等渠道规范校验' },
@@ -478,11 +480,13 @@
     // dropdown's primary label, cat.<id>.en for the secondary EN label that
     // shows on each dropdown item).
     const cats = [
-      { id: 'image', key: 'cat.image', defaultName: '图像处理',     icon: '🖼️' },
-      { id: 'anim',  key: 'cat.anim',  defaultName: '动画 / 精灵图', icon: '🎬' },
-      { id: 'av',    key: 'cat.av',    defaultName: '音视频',       icon: '🔊' },
-      { id: 'code',  key: 'cat.code',  defaultName: '代码 / 打包',   icon: '🗜️' },
-      { id: 'audit', key: 'cat.audit', defaultName: '分析 / 诊断',   icon: '📊' }
+      { id: 'image', key: 'cat.image', defaultName: '图像',          icon: '🖼️' },
+      { id: 'ai',    key: 'cat.ai',    defaultName: 'AI 智能',       icon: '🧠' },
+      { id: 'anim',  key: 'cat.anim',  defaultName: '游戏 / 动画',    icon: '🎮' },
+      { id: 'av',    key: 'cat.av',    defaultName: '音视频',         icon: '🔊' },
+      { id: 'code',  key: 'cat.code',  defaultName: '开发 / 代码',    icon: '🗜️' },
+      { id: 'files', key: 'cat.files', defaultName: '文件 / 文档',    icon: '📦' },
+      { id: 'audit', key: 'cat.audit', defaultName: '分析 / Playable', icon: '📊' }
     ];
 
     // For each tool, pick its display name based on language:

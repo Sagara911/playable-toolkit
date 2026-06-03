@@ -45,14 +45,18 @@
   /* per-category accent palette — each tool group gets a recognizable hue.
      Cards/headers pick the matching --cat-*-rgb via [data-cat="..."]. */
   --cat-image-rgb:  84, 156, 255;   /* cool blue   */
+  --cat-ai-rgb:     222, 92, 210;   /* fuchsia     */
   --cat-anim-rgb:   168, 110, 232;  /* violet      */
   --cat-av-rgb:     255, 110, 130;  /* coral pink  */
   --cat-code-rgb:   245, 165, 75;   /* amber       */
+  --cat-files-rgb:  170, 200, 70;   /* lime        */
   --cat-audit-rgb:  80, 220, 200;   /* teal        */
   --cat-image:  rgb(var(--cat-image-rgb));
+  --cat-ai:     rgb(var(--cat-ai-rgb));
   --cat-anim:   rgb(var(--cat-anim-rgb));
   --cat-av:     rgb(var(--cat-av-rgb));
   --cat-code:   rgb(var(--cat-code-rgb));
+  --cat-files:  rgb(var(--cat-files-rgb));
   --cat-audit:  rgb(var(--cat-audit-rgb));
 
   --radius:       12px;
@@ -95,9 +99,11 @@
 
   /* Category accents — slightly darker variants so they read on white */
   --cat-image-rgb:  46, 110, 220;
+  --cat-ai-rgb:     185, 50, 180;
   --cat-anim-rgb:   130, 70, 200;
   --cat-av-rgb:     220, 70, 90;
   --cat-code-rgb:   215, 130, 30;
+  --cat-files-rgb:  120, 150, 40;
   --cat-audit-rgb:  20, 165, 145;
 
   --success:      #1ea870;

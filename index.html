@@ -368,9 +368,11 @@
   }
   /* Mirror the data-cat mapping for category section wrappers */
   .cat-anchor[data-cat="image"] { --cat-rgb: var(--cat-image-rgb); }
+  .cat-anchor[data-cat="ai"]    { --cat-rgb: var(--cat-ai-rgb); }
   .cat-anchor[data-cat="anim"]  { --cat-rgb: var(--cat-anim-rgb); }
   .cat-anchor[data-cat="av"]    { --cat-rgb: var(--cat-av-rgb); }
   .cat-anchor[data-cat="code"]  { --cat-rgb: var(--cat-code-rgb); }
+  .cat-anchor[data-cat="files"] { --cat-rgb: var(--cat-files-rgb); }
   .cat-anchor[data-cat="audit"] { --cat-rgb: var(--cat-audit-rgb); }
   .cat-anchor[data-cat] .cat-name { color: rgb(var(--cat-rgb)); }
   .cat-anchor[data-cat] .cat-count {
@@ -516,9 +518,11 @@
      rewrites --cat-rgb so the icon, hover glow, border all retint
      without needing per-category CSS rules. */
   .tool-card[data-cat="image"] { --cat-rgb: var(--cat-image-rgb); }
+  .tool-card[data-cat="ai"]    { --cat-rgb: var(--cat-ai-rgb); }
   .tool-card[data-cat="anim"]  { --cat-rgb: var(--cat-anim-rgb); }
   .tool-card[data-cat="av"]    { --cat-rgb: var(--cat-av-rgb); }
   .tool-card[data-cat="code"]  { --cat-rgb: var(--cat-code-rgb); }
+  .tool-card[data-cat="files"] { --cat-rgb: var(--cat-files-rgb); }
   .tool-card[data-cat="audit"] { --cat-rgb: var(--cat-audit-rgb); }
   /* Override the hover glow / outline to use --cat-rgb as well */
   .tool-card[data-cat]::before {
@@ -885,9 +889,11 @@
     margin-left: 2px;
   }
   .hero-cat-chips a[data-cat="image"] { --c: var(--cat-image-rgb); }
+  .hero-cat-chips a[data-cat="ai"]    { --c: var(--cat-ai-rgb); }
   .hero-cat-chips a[data-cat="anim"]  { --c: var(--cat-anim-rgb); }
   .hero-cat-chips a[data-cat="av"]    { --c: var(--cat-av-rgb); }
   .hero-cat-chips a[data-cat="code"]  { --c: var(--cat-code-rgb); }
+  .hero-cat-chips a[data-cat="files"] { --c: var(--cat-files-rgb); }
   .hero-cat-chips a[data-cat="audit"] { --c: var(--cat-audit-rgb); }
 
   /* ============================================================
@@ -1045,11 +1051,13 @@
   const toolDesc = (c) => T('tool.' + c.id + '.desc', c.desc);
 
   const CATEGORIES = [
-    { id: 'image', icon: '🖼️', key: 'cat.image', keyEn: 'cat.image.en', name: '图像处理',         en: 'Image Tools' },
-    { id: 'anim',  icon: '🎬', key: 'cat.anim',  keyEn: 'cat.anim.en',  name: '动画 / 精灵图',     en: 'Animation' },
+    { id: 'image', icon: '🖼️', key: 'cat.image', keyEn: 'cat.image.en', name: '图像',             en: 'Image Tools' },
+    { id: 'ai',    icon: '🧠', key: 'cat.ai',    keyEn: 'cat.ai.en',    name: 'AI 智能',          en: 'AI Powered' },
+    { id: 'anim',  icon: '🎮', key: 'cat.anim',  keyEn: 'cat.anim.en',  name: '游戏 / 动画',       en: 'Game / Animation' },
     { id: 'av',    icon: '🔊', key: 'cat.av',    keyEn: 'cat.av.en',    name: '音视频',           en: 'Audio / Video' },
-    { id: 'code',  icon: '🗜️', key: 'cat.code',  keyEn: 'cat.code.en',  name: '代码 / 打包',       en: 'Code & Bundle' },
-    { id: 'audit', icon: '📊', key: 'cat.audit', keyEn: 'cat.audit.en', name: '分析 / 诊断',       en: 'Analyze & Audit' }
+    { id: 'code',  icon: '🗜️', key: 'cat.code',  keyEn: 'cat.code.en',  name: '开发 / 代码',       en: 'Dev / Code' },
+    { id: 'files', icon: '📦', key: 'cat.files', keyEn: 'cat.files.en', name: '文件 / 文档',       en: 'Files / Docs' },
+    { id: 'audit', icon: '📊', key: 'cat.audit', keyEn: 'cat.audit.en', name: '分析 / Playable',  en: 'Analyze & Audit' }
   ];
 
   // Build card list from shared TOOLS data

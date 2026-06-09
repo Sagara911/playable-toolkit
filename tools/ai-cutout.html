@@ -324,9 +324,10 @@
           <div class="group">
             <button type="button" class="icon-btn" id="brushUndo" data-i18n="ac.brush.undo" data-i18n-attr="title:ac.brush.undo.title" title="撤销上一笔 (Ctrl+Z)">↶ 撤销</button>
             <button type="button" class="icon-btn" id="brushReset" data-i18n="ac.brush.reset" data-i18n-attr="title:ac.brush.reset.title" title="清除所有笔刷修改,回到 AI 原始抠图">🔄 重置</button>
+            <button type="button" class="icon-btn" id="brushZoom" title="放大查看结果(笔刷模式下点画布只涂抹,放大请点这里)">🔍 放大</button>
           </div>
         </div>
-        <div class="preview-box" id="outBox">
+        <div class="preview-box" id="outBox" data-no-lightbox>
           <div class="preview-empty" data-i18n="ac.empty.out">点击"开始抠图"后这里显示结果</div>
         </div>
       </div>
@@ -1080,6 +1081,12 @@ Toolkit.injectTopbar('ai-cutout');
     });
     document.getElementById('brushUndo').addEventListener('click', undo);
     document.getElementById('brushReset').addEventListener('click', reset);
+    // Explicit zoom — the result canvas is a brush surface (clicks paint), so it's
+    // excluded from the click-to-zoom lightbox; this button opens it on demand.
+    document.getElementById('brushZoom').addEventListener('click', () => {
+      const cv = activeItem && activeItem.liveCanvas;
+      if (cv && Toolkit.Lightbox) Toolkit.Lightbox.open(cv);
+    });
     // keyboard shortcuts
     window.addEventListener('keydown', (e) => {
       if (!activeItem) return;

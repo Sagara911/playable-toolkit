@@ -247,9 +247,10 @@
     <div class="field">
       <select id="modelSelect">
         <option value="briaai/RMBG-1.4" selected data-i18n="ac.opt.model.rmbg">RMBG-1.4 (~85MB · 通用 · 物体/商品/人像都行 · 非商用免费)</option>
+        <option value="rvm">🏆 RVM (~4MB · 人像最强 · 发丝级边缘 · TF.js/WebGPU)</option>
         <option value="Xenova/modnet" data-i18n="ac.opt.model.modnet">MODNet (~25MB · 仅人像 · 快 · Apache 2.0 可商用)</option>
       </select>
-      <div class="info" style="margin-top:4px">抠<strong>物体/商品/游戏素材</strong>或拿不准 → 用 <strong>RMBG-1.4</strong>(通用);只抠<strong>人像</strong> → MODNet(快 + 可商用)。<br/>⚠️ <strong>商业用途注意</strong>:RMBG-1.4 是非商用授权,商用 playable 请用 MODNet(人像)或在最终素材上自行确认授权。<br/>边缘不干净时:开下面的「边缘精修」,或用右侧<strong>保留/擦除笔刷</strong>手动修。</div>
+      <div class="info" style="margin-top:4px">抠<strong>人像</strong>要最好边缘(头发/发丝) → 用 <strong>🏆 RVM</strong>(最强,需 WebGPU);抠<strong>物体/商品/游戏素材</strong>或拿不准 → <strong>RMBG-1.4</strong>;要快或可商用人像 → MODNet。<br/>⚠️ <strong>授权</strong>:RMBG-1.4 非商用;RVM 代码 GPL-3(但抠出的图片归你、可商用);商用最稳是 MODNet。边缘不净时开「边缘精修」或用右侧笔刷手修。</div>
     </div>
     <div class="field">
       <label data-i18n="ac.device.label">计算后端</label>
@@ -342,6 +343,7 @@
 <div id="brushCursor"></div>
 
 <script src="../assets/shared.js"></script>
+<script src="../assets/rvm.js"></script>
 <script>
 Toolkit.injectTopbar('ai-cutout');
 </script>
@@ -362,6 +364,7 @@ Toolkit.injectTopbar('ai-cutout');
   // model state
   let model = null, processor = null;
   let modelId = null;
+  let isRVM = false;
   let RawImage = null;
   let transformers = null;
 
@@ -471,6 +474,20 @@ Toolkit.injectTopbar('ai-cutout');
     const wantDevice = $('device').value;
     if (model && modelId === wantId + '@' + wantDevice) return;
     $('loadModelBtn').disabled = true;
+    isRVM = (wantId === 'rvm');
+    if (isRVM) {
+      try {
+        await RVM.prepare({ onStatus: m => log.dim('  ' + m), onProgress: onModelProgress });
+        model = RVM; processor = null; modelId = wantId + '@' + wantDevice;
+        $('dlStat').classList.remove('show');
+        log.ok(`RVM 模型加载完成 (${RVM.backend()})`);
+      } catch (e) {
+        log.err('RVM 加载失败: ' + e.message); console.error(e); model = null;
+      } finally {
+        $('loadModelBtn').disabled = false; progress.hide();
+      }
+      return;
+    }
     log.dim(Toolkit.T('ac.log.loadingTransformers', null, '从 CDN 加载 transformers.js...'));
     try {
       if (!transformers) {
@@ -588,27 +605,32 @@ Toolkit.injectTopbar('ai-cutout');
     const bm = it.bitmap;
     const cv = newCanvas(bm.width, bm.height);
     cv.getContext('2d').drawImage(bm, 0, 0);
-    const blob = await canvasToBlob(cv, 'image/png');
-    const url = URL.createObjectURL(blob);
-    const image = await RawImage.fromURL(url);
-    URL.revokeObjectURL(url);
-    const { pixel_values } = await processor(image);
-    // Different models expect different input tensor names — MODNet/RMBG-1.4
-    // use 'input', BiRefNet uses 'input_image'. Auto-detect from the model
-    // session's declared input names so we don't have to maintain a per-model
-    // map by hand.
-    let inputName = 'input';
-    try {
-      const sess = model.sessions?.model || Object.values(model.sessions || {})[0];
-      if (sess?.inputNames?.length) inputName = sess.inputNames[0];
-    } catch (_) { /* fall back to default */ }
-    const out = await model({ [inputName]: pixel_values });
-    let mask = null;
-    for (const k of ['output', 'alphas', 'alpha', 'masks', 'logits', 'pred_masks']) {
-      if (out[k]) { mask = out[k]; break; }
+
+    let maskCanvas;
+    if (isRVM) {
+      // RVM (TF.js) returns an alpha-matte canvas directly (RGB=255, A=matte).
+      maskCanvas = await RVM.matte(cv);
+    } else {
+      const blob = await canvasToBlob(cv, 'image/png');
+      const url = URL.createObjectURL(blob);
+      const image = await RawImage.fromURL(url);
+      URL.revokeObjectURL(url);
+      const { pixel_values } = await processor(image);
+      // Different models expect different input tensor names — MODNet/RMBG-1.4
+      // use 'input'. Auto-detect from the model session's declared input names.
+      let inputName = 'input';
+      try {
+        const sess = model.sessions?.model || Object.values(model.sessions || {})[0];
+        if (sess?.inputNames?.length) inputName = sess.inputNames[0];
+      } catch (_) { /* fall back to default */ }
+      const out = await model({ [inputName]: pixel_values });
+      let mask = null;
+      for (const k of ['output', 'alphas', 'alpha', 'masks', 'logits', 'pred_masks']) {
+        if (out[k]) { mask = out[k]; break; }
+      }
+      if (!mask) mask = out[Object.keys(out)[0]];
+      maskCanvas = tensorToCanvas(mask);
     }
-    if (!mask) mask = out[Object.keys(out)[0]];
-    const maskCanvas = tensorToCanvas(mask);
     const resultCanvas = applyMask(bm, maskCanvas);
     it.outCanvas = resultCanvas;
     // Capture the AI's final alpha (post refine/decontam/feather) and seed

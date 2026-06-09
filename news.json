@@ -1,6 +1,17 @@
 {
   "entries": [
     {
+      "version": "dobby-v91",
+      "title": "🏆 AI 抠图加 RVM:人像发丝级抠图(浏览器本地)",
+      "date": "2026-06-02",
+      "items": [
+        "人像想要最好边缘 → 模型选 🏆 RVM(RobustVideoMatting),发丝级 matting,目前人像抠图 SOTA",
+        "为什么是 TF.js 不是 ONNX:RVM 的 ONNX 在 ort-web 上报 AveragePool 算子不支持;改用官方 TF.js 版 + WebGPU 跑通(模型仅 ~4MB,动态分辨率,不会像 BiRefNet 那样爆显存)",
+        "模型三选一按场景:RVM(人像最强)/ RMBG-1.4(通用·物体商品)/ MODNet(人像·快·可商用);都能叠加边缘精修 + 保留/擦除笔刷手修",
+        "授权:RVM 代码 GPL-3,但抠出的图片归你、可商用;最稳商用人像仍是 MODNet(Apache-2.0)。需 Chrome/Edge 113+(WebGPU)"
+      ]
+    },
+    {
       "version": "dobby-v90",
       "title": "🤖 AI 抠图改默认 + 选型指引:非人像开箱即用",
       "date": "2026-06-02",

@@ -248,6 +248,7 @@
       <select id="modelSelect">
         <option value="briaai/RMBG-1.4" selected data-i18n="ac.opt.model.rmbg">RMBG-1.4 (~85MB · 通用 · 物体/商品/人像都行 · 非商用免费)</option>
         <option value="rvm">🏆 RVM (~4MB · 人像最强 · 发丝级边缘 · TF.js/WebGPU)</option>
+        <option value="sam">✂️ SAM 点击抠图 (复杂场景抠特定角色/物体 · 点哪抠哪)</option>
         <option value="Xenova/modnet" data-i18n="ac.opt.model.modnet">MODNet (~25MB · 仅人像 · 快 · Apache 2.0 可商用)</option>
       </select>
       <div class="info" style="margin-top:4px">抠<strong>人像</strong>要最好边缘(头发/发丝) → 用 <strong>🏆 RVM</strong>(最强,需 WebGPU);抠<strong>物体/商品/游戏素材</strong>或拿不准 → <strong>RMBG-1.4</strong>;要快或可商用人像 → MODNet。<br/>⚠️ <strong>授权</strong>:RMBG-1.4 非商用;RVM 代码 GPL-3(但抠出的图片归你、可商用);商用最稳是 MODNet。边缘不净时开「边缘精修」或用右侧笔刷手修。</div>
@@ -298,6 +299,11 @@
     <div class="preview-pair">
       <div class="preview-col">
         <div class="label" data-i18n="ac.label.src">原图 (点击下方队列切换)</div>
+        <div class="brush-toolbar" id="samBar">
+          <div class="group" style="font-size:11px; color:var(--text-soft); line-height:1.4">✂️ <strong>左键</strong>点角色身上加选 · <strong>右键</strong>点背景排除 · 可多点逐步精修</div>
+          <div class="sep"></div>
+          <button type="button" class="icon-btn" id="samClear">🗑️ 清除选点</button>
+        </div>
         <div class="preview-box" id="srcBox">
           <div class="preview-empty" data-i18n="ac.empty.src">拖入图片</div>
         </div>
@@ -345,6 +351,7 @@
 
 <script src="../assets/shared.js"></script>
 <script src="../assets/rvm.js"></script>
+<script src="../assets/sam.js"></script>
 <script>
 Toolkit.injectTopbar('ai-cutout');
 </script>
@@ -366,6 +373,9 @@ Toolkit.injectTopbar('ai-cutout');
   let model = null, processor = null;
   let modelId = null;
   let isRVM = false;
+  let isSAM = false;
+  let samPoints = [];
+  let samCanvas = null, samSrcClean = null, samItem = null;
   let RawImage = null;
   let transformers = null;
 
@@ -397,6 +407,11 @@ Toolkit.injectTopbar('ai-cutout');
     selectItem(0);
     $('stats').innerHTML = Toolkit.T('ac.stats.pending', { n: items.length, w: srcBitmap.width, h: srcBitmap.height }, `<strong>${items.length}</strong> 张待处理 · 单图 <strong>${srcBitmap.width}×${srcBitmap.height}</strong>`);
 
+    if (isSAM) {
+      // SAM is click-driven, not batch. selectItem(0) above already armed the
+      // source canvas via the isSAM hook — nothing more to do here.
+      return;
+    }
     if (model) {
       $('processBtn').disabled = false;
       $('processBtn').click();
@@ -468,6 +483,85 @@ Toolkit.injectTopbar('ai-cutout');
     }
     $('downloadBtn').disabled = !it.outBlob;
     [...$('batchGrid').children].forEach((el, j) => el.classList.toggle('selected', j === i));
+    if (isSAM) samSetupForItem(it);
+  }
+
+  // ── SAM click-to-segment interaction ──────────────────────────────────
+  function samSetupForItem(it) {
+    samPoints = []; samItem = it;
+    // drop listeners from any previous source canvas to avoid double-firing
+    if (samCanvas) { samCanvas.removeEventListener('click', onSamClick); samCanvas.removeEventListener('contextmenu', onSamRightClick); }
+    samCanvas = $('srcBox').querySelector('canvas');
+    if (!samCanvas) return;
+    samSrcClean = samCanvas.getContext('2d').getImageData(0, 0, samCanvas.width, samCanvas.height);
+    samCanvas.style.cursor = 'crosshair';
+    samCanvas.addEventListener('click', onSamClick);
+    samCanvas.addEventListener('contextmenu', onSamRightClick);
+    it.samReady = false;
+    (async () => {
+      try { await SAM.setImage(samCanvas, { onStatus: m => log.dim('  ' + m) }); it.samReady = true; log.ok('图片已分析 · 点击角色身上抠图(右键排除背景)'); }
+      catch (e) { log.err('SAM 编码失败: ' + e.message); }
+    })();
+  }
+  function samCoord(e) {
+    const r = samCanvas.getBoundingClientRect();
+    return { x: Math.round((e.clientX - r.left) / r.width * samCanvas.width), y: Math.round((e.clientY - r.top) / r.height * samCanvas.height) };
+  }
+  function redrawSamMarkers() {
+    if (!samCanvas || !samSrcClean) return;
+    const ctx = samCanvas.getContext('2d');
+    ctx.putImageData(samSrcClean, 0, 0);
+    const rad = Math.max(4, Math.round(samCanvas.width * 0.012));
+    for (const p of samPoints) {
+      ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, Math.PI * 2);
+      ctx.fillStyle = p.fg ? 'rgba(46,204,113,0.95)' : 'rgba(231,76,60,0.95)';
+      ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke();
+    }
+  }
+  async function runSam() {
+    if (!samItem) return;
+    redrawSamMarkers();
+    try {
+      const res = await SAM.segment(samPoints);
+      if (!res) return;
+      await applyCutoutResult(samItem, res.maskCanvas);
+      log.dim(`SAM 选区 · score ${res.score.toFixed(3)} · ${samPoints.length} 点`);
+    } catch (e) { log.err('SAM 分割失败: ' + e.message); console.error(e); }
+  }
+  async function onSamClick(e) {
+    e.preventDefault();
+    if (!samItem || !samItem.samReady) { log.dim('  还在分析图片,稍等一下再点...'); return; }
+    samPoints.push({ ...samCoord(e), fg: true });
+    await runSam();
+  }
+  async function onSamRightClick(e) {
+    e.preventDefault();
+    if (!samItem || !samItem.samReady) return;
+    samPoints.push({ ...samCoord(e), fg: false });
+    await runSam();
+  }
+
+  // Shared: turn a mask canvas into the cutout result + seed brush + enable download.
+  async function applyCutoutResult(it, maskCanvas) {
+    const bm = it.bitmap;
+    const resultCanvas = applyMask(bm, maskCanvas);
+    it.outCanvas = resultCanvas;
+    const w = resultCanvas.width, h = resultCanvas.height;
+    const rd = resultCanvas.getContext('2d').getImageData(0, 0, w, h).data;
+    it.aiAlpha = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i++) it.aiAlpha[i] = rd[i*4 + 3];
+    it.userAlpha = new Uint8Array(it.aiAlpha);
+    it.undoStack = [];
+    it.outBlob = await canvasToBlob(resultCanvas, 'image/png');
+    it.outDirty = false;
+    it.status = 'done';
+    it.liveCanvas = newCanvas(w, h);
+    it.liveCanvas.getContext('2d').drawImage(resultCanvas, 0, 0);
+    $('outBox').innerHTML = ''; $('outBox').appendChild(it.liveCanvas);
+    Brush.attachToItem(it);
+    outBlob = it.outBlob; outCanvas = it.outCanvas;
+    $('downloadBtn').disabled = false;
+    handoff?.setBlob(it.outBlob, (it.file.name.replace(/\.[^.]+$/, '') || 'cutout') + '_cutout.png');
   }
 
   async function loadModel() {
@@ -476,6 +570,27 @@ Toolkit.injectTopbar('ai-cutout');
     if (model && modelId === wantId + '@' + wantDevice) return;
     $('loadModelBtn').disabled = true;
     isRVM = (wantId === 'rvm');
+    isSAM = (wantId === 'sam');
+    // SAM clicks happen on the SOURCE preview → exclude it from the click-to-zoom
+    // lightbox while in SAM mode (same conflict the result canvas had).
+    document.getElementById('srcBox').toggleAttribute('data-no-lightbox', isSAM);
+    if (isSAM) {
+      try {
+        await SAM.prepare({ onStatus: m => log.dim('  ' + m), onProgress: onModelProgress });
+        model = { __sam: true }; processor = null; modelId = wantId + '@' + wantDevice;
+        $('dlStat').classList.remove('show');
+        $('samBar').classList.add('show');
+        $('processBtn').disabled = true;
+        log.ok('SAM 就绪 — 在左侧原图上点击角色即可抠图(无需点「开始抠图」)');
+        if (selectedIdx >= 0 && items[selectedIdx]) samSetupForItem(items[selectedIdx]);
+      } catch (e) {
+        log.err('SAM 加载失败: ' + e.message); console.error(e); model = null;
+      } finally {
+        $('loadModelBtn').disabled = false; progress.hide();
+      }
+      return;
+    }
+    $('samBar').classList.remove('show');
     if (isRVM) {
       try {
         await RVM.prepare({ onStatus: m => log.dim('  ' + m), onProgress: onModelProgress });
@@ -550,6 +665,7 @@ Toolkit.injectTopbar('ai-cutout');
   }
 
   $('processBtn').addEventListener('click', async () => {
+    if (isSAM) { log.dim('SAM 模式:直接在左侧原图上点击角色抠图,无需「开始抠图」'); return; }
     if (!model || !items.length) return;
     $('processBtn').disabled = true;
     $('downloadZipBtn').disabled = true;
@@ -1086,6 +1202,11 @@ Toolkit.injectTopbar('ai-cutout');
     document.getElementById('brushZoom').addEventListener('click', () => {
       const cv = activeItem && activeItem.liveCanvas;
       if (cv && Toolkit.Lightbox) Toolkit.Lightbox.open(cv);
+    });
+    document.getElementById('samClear').addEventListener('click', () => {
+      samPoints = [];
+      if (samCanvas && samSrcClean) samCanvas.getContext('2d').putImageData(samSrcClean, 0, 0);
+      log.dim('已清除选点 · 重新点击角色');
     });
     // keyboard shortcuts
     window.addEventListener('keydown', (e) => {

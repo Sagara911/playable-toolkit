@@ -234,7 +234,7 @@
     { id: 'png-crusher',    cat: 'image', name: 'PNG 深压',       en: 'PNG Crusher',     icon: '💎', href: 'tools/png-crusher.html',    desc: '深度 PNG 压缩 (palette 编码, -60~85%)' },
     { id: 'image-editor',   cat: 'image', name: '图片编辑',       en: 'Image Editor',    icon: '🖼️', href: 'tools/image-editor.html',   desc: '单图编辑:裁剪 / 旋转 / 加文字 / 像素化 / 滤镜' },
     { id: 'color-tools',    cat: 'image', name: '调色工具',       en: 'Color Tools',     icon: '🎨', href: 'tools/color-tools.html',    desc: '抠图 / 取色 / 主色提取 / 减色' },
-    { id: 'ai-cutout',      cat: 'ai',    name: 'AI 抠图',        en: 'AI Cutout',       icon: '🤖', href: 'tools/ai-cutout.html',      desc: 'AI 抠图:RVM(人像发丝级·TF.js)/ RMBG-1.4(通用)/ MODNet(人像可商用)+ 边缘精修 + 手动笔刷' },
+    { id: 'ai-cutout',      cat: 'ai',    name: 'AI 抠图',        en: 'AI Cutout',       icon: '🤖', href: 'tools/ai-cutout.html',      desc: 'AI 抠图:SAM 点击精准抠(复杂场景)/ RVM 人像发丝级 / RMBG 通用 / MODNet 可商用 + 边缘精修 + 手动笔刷' },
     { id: 'watermark-remove',cat:'ai',    name: '去水印',         en: 'Watermark Remove',icon: '🩹', href: 'tools/watermark-remove.html', desc: '画刷 / 矩形选水印区,扩散插值或 AI 模型填充' },
     { id: 'composer',       cat: 'image', name: '拼图合成',       en: 'Composer',        icon: '🧩', href: 'tools/composer.html',       desc: '多图拼接 / 叠加 / 加水印' },
     { id: 'image-diff',     cat: 'image', name: '图像对比',       en: 'Image Diff',      icon: '🔬', href: 'tools/image-diff.html',     desc: 'A/B 对比 + 滑动 + 热图 + PSNR/SSIM,压缩前后必备' },

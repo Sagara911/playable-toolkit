@@ -64,11 +64,8 @@
       <p class="nobi-tag">本地游戏美术素材库 · AI 自动打标 / 以图搜图 / 情绪板画板 / 看球小窗</p>
 
       <div class="nobi-dl">
-        <a id="dlBtn" class="nobi-btn primary" aria-disabled="true" href="#" rel="noopener">
+        <a id="dlBtn" class="nobi-btn primary" aria-disabled="true" href="#" rel="noopener" download>
           <span id="dlIcon">⏳</span><span id="dlText">读取最新版本…</span>
-        </a>
-        <a class="nobi-btn ghost" href="https://github.com/Sagara911/Nobi/releases/latest" target="_blank" rel="noopener">
-          所有版本 / 源码 ↗
         </a>
       </div>
       <p class="nobi-meta" id="dlMeta">Windows 10/11 · 安装后自动更新</p>
@@ -82,7 +79,7 @@
     </div>
 
     <p class="nobi-note">
-      由 GitHub Releases 分发并经 CI 签名；下载按钮自动指向最新版。暂仅提供 Windows 版。
+      安装包经 CI 签名，下载按钮自动指向最新版；安装后应用内自动更新。暂仅提供 Windows 版。
     </p>
   </div>
 
@@ -96,16 +93,15 @@ Toolkit.injectTopbar('nobi'); // 顶栏 + 「← 全部工具」返回按钮（�
   var icon = document.getElementById('dlIcon');
   var text = document.getElementById('dlText');
   var meta = document.getElementById('dlMeta');
-  var RELEASES = 'https://github.com/' + REPO + '/releases/latest';
+  // API 取不到时的兜底直链（指向安装包文件本身，不是仓库页；新版发布后正常路径会覆盖它）
+  var FALLBACK_EXE = 'https://github.com/' + REPO + '/releases/download/v0.1.13/nobi_0.1.13_x64-setup.exe';
 
-  // 退化：API 拿不到就让按钮指向 Release 页（方式①永远兜底）
+  // 整页不提供任何「跳转到 git 仓库页」的入口；只给安装包文件直链（点了是下文件）
   function fallback(msg) {
-    btn.href = RELEASES;
-    btn.target = '_blank';
-    btn.setAttribute('rel', 'noopener');
+    btn.href = FALLBACK_EXE;
     btn.removeAttribute('aria-disabled');
     icon.textContent = '⬇';
-    text.textContent = '前往下载（Windows）';
+    text.textContent = '下载 Nobi · Windows';
     if (msg) meta.textContent = msg;
   }
 
@@ -121,15 +117,14 @@ Toolkit.injectTopbar('nobi'); // 顶栏 + 「← 全部工具」返回按钮（�
       assets.find(function (a) { return /-setup\.exe$/i.test(a.name); }) ||
       assets.find(function (a) { return /\.msi$/i.test(a.name); }) ||
       assets.find(function (a) { return /\.exe$/i.test(a.name); });
-    if (!pick) { fallback('最新版暂无 Windows 安装包，去 Release 页看看'); return; }
+    if (!pick) { fallback('Windows 10/11 · 安装后自动更新'); return; }
 
     btn.href = pick.browser_download_url;
     btn.removeAttribute('aria-disabled');
     icon.textContent = '⬇';
     var size = pick.size ? ' · ' + (pick.size / 1048576).toFixed(1) + ' MB' : '';
     text.textContent = '下载 Nobi · Windows';
-    meta.innerHTML = (rel.tag_name || '') + size +
-      ' · 安装后自动更新 · <a href="' + RELEASES + '" target="_blank" rel="noopener">其它版本</a>';
+    meta.textContent = (rel.tag_name || '') + size + ' · 安装后自动更新';
   } catch (e) {
     fallback('Windows 10/11 · 安装后自动更新');
   }

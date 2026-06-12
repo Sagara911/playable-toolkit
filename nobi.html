@@ -15,6 +15,7 @@
   }
   .nobi-logo { font-size: 64px; line-height: 1; }
   .nobi-hero h1 {
+    display: block; /* 盖掉全局 h1{display:flex}，否则 text-align:center 不生效、标题会偏左 */
     font-family: 'Space Grotesk', sans-serif; font-size: 34px; margin: 14px 0 6px;
     color: var(--text);
   }

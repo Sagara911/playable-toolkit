@@ -106,6 +106,15 @@ gh repo create my-toolkit --public --source=. --push  # 需要 gh CLI
 - PWA + Service Worker 离线缓存所有工具页
 - 数据流:**本地 → 本地**,文件不上传
 
+### Nobi 桌面应用下载页(`nobi.html`)
+
+Nobi 是独立的 Tauri 桌面应用(另一个仓库),不是浏览器工具,所以单独成页、首页也单独成横幅板块(不混进工具列表/分类/搜索)。
+
+- **下载链接运行时动态解析**:`nobi.html` 每次打开都调 GitHub API(`/repos/<owner>/Nobi/releases/latest`),把下载按钮指向最新 Release 里的 `*-setup.exe`(NSIS)。
+- **所以 Nobi 发新版后,这边不用做任何事**——下次有人访问自动是新版,无需重新部署 Dobby、无需改代码。
+- 页面**不外露任何指向 Nobi 仓库页的链接**(按钮直指安装包文件本身)。
+- ⚠️ 维护点:断网/API 限流时的兜底常量 `FALLBACK_EXE`(`nobi.html` 内)写死了某版直链,会慢慢过时,偶尔手动 bump;若 Nobi 改了打包命名(不再是 `*-setup.exe`),要同步改 `nobi.html` 里的资产匹配正则。
+
 ---
 
 **问题反馈**: 直接告诉作者你卡在哪里,带上浏览器版本和报错截图。

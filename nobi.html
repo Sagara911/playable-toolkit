@@ -1,0 +1,139 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap">
+<title>Nobi 素材管理器 · Dobby</title>
+<link rel="stylesheet" href="assets/shared.css" />
+<style>
+  .nobi-wrap { max-width: 860px; margin: 0 auto; padding: 8px 16px 64px; }
+  .nobi-hero {
+    text-align: center; padding: 40px 20px 28px;
+  }
+  .nobi-logo { font-size: 64px; line-height: 1; }
+  .nobi-hero h1 {
+    font-family: 'Space Grotesk', sans-serif; font-size: 34px; margin: 14px 0 6px;
+    color: var(--text);
+  }
+  .nobi-tag { color: var(--text-dim, #9aa0ad); font-size: 15px; margin: 0 0 4px; }
+
+  .nobi-dl {
+    display: flex; flex-wrap: wrap; gap: 12px; justify-content: center;
+    align-items: center; margin: 26px 0 8px;
+  }
+  .nobi-btn {
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 13px 26px; border-radius: 999px; font-size: 15px; font-weight: 600;
+    cursor: pointer; border: 1px solid transparent; text-decoration: none;
+    transition: filter .15s, background .15s, border-color .15s;
+  }
+  .nobi-btn.primary { background: var(--jade, #34d399); color: #04140d; }
+  .nobi-btn.primary:hover { filter: brightness(1.08); }
+  .nobi-btn.primary[aria-disabled="true"] { opacity: .6; pointer-events: none; }
+  .nobi-btn.ghost {
+    background: var(--panel, #16181d); color: var(--text); border-color: var(--border, #2a2d35);
+  }
+  .nobi-btn.ghost:hover { border-color: var(--jade, #34d399); color: var(--jade, #34d399); }
+  .nobi-meta { text-align: center; color: var(--text-dim, #9aa0ad); font-size: 12.5px; min-height: 18px; }
+  .nobi-meta a { color: var(--jade, #34d399); }
+
+  .nobi-feats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px; margin-top: 34px;
+  }
+  .nobi-feat {
+    background: var(--panel, #16181d); border: 1px solid var(--border, #2a2d35);
+    border-radius: 12px; padding: 16px 18px;
+  }
+  .nobi-feat .fi { font-size: 22px; }
+  .nobi-feat h3 { margin: 8px 0 4px; font-size: 15px; color: var(--text); }
+  .nobi-feat p { margin: 0; font-size: 12.5px; color: var(--text-dim, #9aa0ad); line-height: 1.55; }
+  .nobi-note {
+    margin-top: 26px; text-align: center; font-size: 12px; color: var(--text-dim, #9aa0ad);
+  }
+</style>
+</head>
+<body>
+  <div class="nobi-wrap">
+    <div class="nobi-hero">
+      <div class="nobi-logo">🗂️</div>
+      <h1>Nobi 素材管理器</h1>
+      <p class="nobi-tag">本地游戏美术素材库 · AI 自动打标 / 以图搜图 / 情绪板画板 / 看球小窗</p>
+
+      <div class="nobi-dl">
+        <a id="dlBtn" class="nobi-btn primary" aria-disabled="true" href="#" rel="noopener">
+          <span id="dlIcon">⏳</span><span id="dlText">读取最新版本…</span>
+        </a>
+        <a class="nobi-btn ghost" href="https://github.com/Sagara911/Nobi/releases/latest" target="_blank" rel="noopener">
+          所有版本 / 源码 ↗
+        </a>
+      </div>
+      <p class="nobi-meta" id="dlMeta">Windows 10/11 · 安装后自动更新</p>
+    </div>
+
+    <div class="nobi-feats">
+      <div class="nobi-feat"><div class="fi">🏷️</div><h3>AI 自动打标</h3><p>本地视觉模型给素材打标签、提关键词，导入即归类，不上传云端。</p></div>
+      <div class="nobi-feat"><div class="fi">🔍</div><h3>以图搜图</h3><p>CLIP 语义检索：拖一张图进来，找出库里风格 / 内容相近的素材。</p></div>
+      <div class="nobi-feat"><div class="fi">🎨</div><h3>情绪板画板</h3><p>把素材拖到画板自由排布、取色、擦改，攒成合集回库。</p></div>
+      <div class="nobi-feat"><div class="fi">📺</div><h3>看球小窗</h3><p>无边框置顶网页小窗，挂在画图软件上方边干活边看，全套快捷键。</p></div>
+    </div>
+
+    <p class="nobi-note">
+      由 GitHub Releases 分发并经 CI 签名；下载按钮自动指向最新版。暂仅提供 Windows 版。
+    </p>
+  </div>
+
+<script src="assets/shared.js"></script>
+<script>
+Toolkit.injectTopbar('nobi'); // 顶栏 + 「← 全部工具」返回按钮（与其它工具页一致）
+
+(async function () {
+  var REPO = 'Sagara911/Nobi';
+  var btn = document.getElementById('dlBtn');
+  var icon = document.getElementById('dlIcon');
+  var text = document.getElementById('dlText');
+  var meta = document.getElementById('dlMeta');
+  var RELEASES = 'https://github.com/' + REPO + '/releases/latest';
+
+  // 退化：API 拿不到就让按钮指向 Release 页（方式①永远兜底）
+  function fallback(msg) {
+    btn.href = RELEASES;
+    btn.target = '_blank';
+    btn.setAttribute('rel', 'noopener');
+    btn.removeAttribute('aria-disabled');
+    icon.textContent = '⬇';
+    text.textContent = '前往下载（Windows）';
+    if (msg) meta.textContent = msg;
+  }
+
+  try {
+    var r = await fetch('https://api.github.com/repos/' + REPO + '/releases/latest', {
+      headers: { 'Accept': 'application/vnd.github+json' }
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    var rel = await r.json();
+    var assets = rel.assets || [];
+    // NSIS setup.exe 优先（最干净），其次 .msi，再退 .exe
+    var pick =
+      assets.find(function (a) { return /-setup\.exe$/i.test(a.name); }) ||
+      assets.find(function (a) { return /\.msi$/i.test(a.name); }) ||
+      assets.find(function (a) { return /\.exe$/i.test(a.name); });
+    if (!pick) { fallback('最新版暂无 Windows 安装包，去 Release 页看看'); return; }
+
+    btn.href = pick.browser_download_url;
+    btn.removeAttribute('aria-disabled');
+    icon.textContent = '⬇';
+    var size = pick.size ? ' · ' + (pick.size / 1048576).toFixed(1) + ' MB' : '';
+    text.textContent = '下载 Nobi · Windows';
+    meta.innerHTML = (rel.tag_name || '') + size +
+      ' · 安装后自动更新 · <a href="' + RELEASES + '" target="_blank" rel="noopener">其它版本</a>';
+  } catch (e) {
+    fallback('Windows 10/11 · 安装后自动更新');
+  }
+})();
+</script>
+</body>
+</html>

@@ -1262,7 +1262,7 @@
   function makeCard(c) {
     const a = document.createElement('a');
     a.className = 'tool-card';
-    a.href = c.href;
+    a.href = Toolkit.toolHref(c.href);
     a.dataset.cat = c.cat;
     a.dataset.name = (c.name + ' ' + c.en + ' ' + c.desc).toLowerCase();
     // In en mode the primary name is already English, so the .card-sub label

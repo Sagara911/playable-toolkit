@@ -285,6 +285,17 @@
     { id: 'playable-slim',  cat: 'audit', name: 'Playable 瘦身',   en: 'Playable Slim',   icon: '🩻', href: 'tools/playable-slim.html', desc: '拆大体积 HTML 内联素材 → 单独压(图片 AVIF/WebP 取最小 + 降采样 · 视频 WebCodecs · 字体子集化)→ 重组,Playable 减肥神器' }
   ];
 
+  // Cloudflare Pages serves HTML files at extensionless canonical URLs and
+  // redirects requests ending in `.html`. Some VPN / proxy accelerators hang
+  // while following that extra redirect, leaving Chrome on a blank navigation.
+  // Keep the stored hrefs unchanged for localhost + GitHub Pages, but emit the
+  // canonical form on *.pages.dev so tool navigation is a single request.
+  const IS_CLOUDFLARE_PAGES = /\.pages\.dev$/i.test(window.location.hostname);
+  function toolHref(href) {
+    if (!IS_CLOUDFLARE_PAGES || typeof href !== 'string') return href;
+    return href.replace(/\.html(?=([?#]|$))/i, '');
+  }
+
   // Per-tool inline usage guide (auto-injected to sidebar).
   const INSTRUCTIONS = {
     'sprite-packer': [
@@ -512,7 +523,7 @@
               </a>
               <div class="nav-dropdown">
                 ${tools.map(t => `
-                  <a href="${prefix}${t.href}" class="${t.id === activeId ? 'active' : ''}">
+                  <a href="${prefix}${toolHref(t.href)}" class="${t.id === activeId ? 'active' : ''}">
                     <span class="dd-icon">${lucideIcon(t.id, 'tool', t.icon)}</span>
                     <span class="dd-name">${toolName(t)}</span>
                     <span class="dd-en">${t.en}</span>
@@ -620,7 +631,7 @@
     const active = wrap.querySelector('.nav-dropdown a.active');
     let activeId = 'home';
     if (active) {
-      const tool = TOOLS.find(t => active.href.endsWith(t.href));
+      const tool = TOOLS.find(t => active.href.endsWith(toolHref(t.href)));
       if (tool) activeId = tool.id;
     }
     wrap.remove();
@@ -2047,11 +2058,15 @@
   function toolUrl(toolId) {
     const inSubdir = window.location.pathname.includes('/tools/');
     const prefix = inSubdir ? './' : './tools/';
-    return prefix + toolId + '.html';
+    return toolHref(prefix + toolId + '.html');
   }
 
   async function sendTo(toolId, blob, fileName) {
-    const srcTool = TOOLS.find(t => location.pathname.endsWith(t.href.replace(/^.*\//, '')));
+    const srcTool = TOOLS.find(t => {
+      const toolFileName = t.href.replace(/^.*\//, '');
+      return location.pathname.endsWith(toolFileName)
+        || location.pathname.endsWith(toolHref(toolFileName));
+    });
     try {
       await idbPut(HANDOFF_KEY, {
         toolId,
@@ -2573,6 +2588,7 @@
 
   window.Toolkit = {
     TOOLS,
+    toolHref,
     injectTopbar,
     $,
     injectInstructions,
